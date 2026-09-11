@@ -71,6 +71,7 @@ const statusBody = {
 
 const runResult: TicketRunResult = {
   ticketId: "TICKET-1042",
+  branchName: "ticketdroid/TICKET-1042",
   status: "complete",
   startedAt: 1_000,
   finishedAt: 3_000,
@@ -317,7 +318,7 @@ describe("detail view", () => {
 
     expect(await screen.findByText("Run complete")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Run Ticketdroid" })).not.toBeInTheDocument();
-    expect(screen.getByText(/Workspace is now patched — reset restores the planted bug/)).toBeInTheDocument();
+    expect(screen.getByText(/Workspace is now patched on local branch ticketdroid\/TICKET-1042/)).toBeInTheDocument();
   });
 
   it("resets the recorded run through the demo reset control", async () => {

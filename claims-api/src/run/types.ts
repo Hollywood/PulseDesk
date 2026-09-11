@@ -72,6 +72,8 @@ export interface PrSummary {
 
 export interface TicketRunResult {
   ticketId: string;
+  /** Local-only branch created for this run; never pushed by Ticketdroid. */
+  branchName?: string;
   status: "complete";
   startedAt: number;
   finishedAt: number;

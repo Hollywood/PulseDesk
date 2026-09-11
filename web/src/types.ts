@@ -85,6 +85,8 @@ export interface DemoResetResult {
 /** Full result of one Ticketdroid run, as recorded by claims-api. */
 export interface TicketRunResult {
   ticketId: string;
+  /** Local-only branch created for this run; never pushed by Ticketdroid. */
+  branchName?: string;
   status: "complete";
   startedAt: number;
   finishedAt: number;

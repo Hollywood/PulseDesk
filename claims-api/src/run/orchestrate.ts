@@ -26,6 +26,8 @@ export const CODE_SEARCH_FILES = [
 const ACTIVE_BINDING_PATTERN = /export const ACTIVE_STRATEGY:[^=]+=\s*(\w+);/;
 
 export interface OrchestrateDeps {
+  /** Name of the local branch created for this run, when running the app. */
+  branchName?: string;
   /** Reads the ticket fixture record for an id. */
   getTicket: (id: string) => Record<string, unknown> | undefined;
   /** Classifies the workspace (buggy / patched / dirty / unknown). */
@@ -230,6 +232,7 @@ export async function runTicket(ticketId: string, deps: OrchestrateDeps): Promis
 
   return {
     ticketId: id,
+    branchName: deps.branchName,
     status: "complete",
     startedAt,
     finishedAt: deps.now(),

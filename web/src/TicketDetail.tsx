@@ -118,7 +118,7 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
                 Reset demo
               </button>
               <p className="run__result">
-                Workspace is now patched — reset restores the planted bug so the demo can run again.
+                Workspace is now patched on local branch {run.run.branchName ?? "ticketdroid/TICKET-1042"} — reset restores the planted bug, removes the branch, and checks out main.
               </p>
             </div>
           </>
