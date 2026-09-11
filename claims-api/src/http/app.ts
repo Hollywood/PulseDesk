@@ -7,6 +7,7 @@ import express, {
 import type { WorkspaceState } from "../gate/certify.js";
 import { resolveWorkspaceState } from "../gate/state.js";
 import { activeStrategyPath } from "../gate/run-tests.js";
+import { createLocalDemoBranch, resetLocalDemoBranch } from "../demo/branch.js";
 import { resetDemo, ResetError, type DemoResetResult } from "../demo/reset.js";
 import { buildDemoStatus } from "../demo/status.js";
 import { createHttpLogger, createLogger, type Logger } from "../logger.js";
@@ -31,12 +32,23 @@ export function defaultDeps(): AppDeps {
     getTickets: loadTickets,
     getWorkspaceState: () => resolveWorkspaceState(activeStrategyPath()),
     startRun: async (ticketId) => {
-      const deps = createDefaultOrchestrateDeps({
-        onPatchApplied: (baseline) => writeBaselineSnapshot(ticketId, baseline),
-      });
-      const result = await runTicket(ticketId, deps);
-      writeRunArtifact(ticketId, result);
-      return result;
+      const branchName = createLocalDemoBranch();
+      try {
+        const deps = createDefaultOrchestrateDeps({
+          branchName,
+          onPatchApplied: (baseline) => writeBaselineSnapshot(ticketId, baseline),
+        });
+        const result = await runTicket(ticketId, deps);
+        writeRunArtifact(ticketId, result);
+        return result;
+      } catch (error) {
+        try {
+          resetLocalDemoBranch();
+        } catch {
+          // Preserve the original bounded run error; reset remains available.
+        }
+        throw error;
+      }
     },
     getRun: (ticketId) => readRunArtifact(ticketId),
     resetDemo,

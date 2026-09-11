@@ -13,5 +13,8 @@
 6. Open PR view (reviewable — no auto-merge, no auto-deploy)
 7. Show human verification checklist
 
+Run creates the local `ticketdroid/TICKET-1042` branch only; it never pushes.
+Reset removes that local branch and checks out `main`.
+
 ## Backup
 - 90s screen recording if live path flakes

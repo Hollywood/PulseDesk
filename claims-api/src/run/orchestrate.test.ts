@@ -100,11 +100,13 @@ describe("runTicket happy path", () => {
       runSuite,
       writePatchTarget: writePatch,
       onPatchApplied,
+      branchName: "ticketdroid/TICKET-1042",
     });
 
     const result = await runTicket("TICKET-1042", deps);
 
     expect(result.ticketId).toBe("TICKET-1042");
+    expect(result.branchName).toBe("ticketdroid/TICKET-1042");
     expect(result.status).toBe("complete");
     expect(result.workspaceBefore).toBe("buggy");
     expect(result.workspaceAfter).toBe("patched");

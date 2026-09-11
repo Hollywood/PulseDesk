@@ -169,6 +169,7 @@ export function RunResultView({ run }: { run: TicketRunResult }) {
           <span className="chip">
             {run.diff.added} added / {run.diff.removed} removed
           </span>
+          {run.branchName === undefined ? null : <span className="chip">Local branch {run.branchName}</span>}
           <span className="chip">{totalDuration(run)}</span>
         </div>
       </header>

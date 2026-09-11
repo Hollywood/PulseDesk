@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { activeStrategyPath } from "../gate/run-tests.js";
 import { resolveWorkspaceState } from "../gate/state.js";
+import { resetLocalDemoBranch, LocalBranchError } from "./branch.js";
 import { baselineSnapshotPath, runArtifactPath } from "../run/store.js";
 
 const DEMO_TICKET_ID = "TICKET-1042";
@@ -32,6 +33,17 @@ function sourceHash(source: string): string {
   return createHash("sha256").update(source, "utf8").digest("hex");
 }
 
+function resetBranch(): void {
+  try {
+    resetLocalDemoBranch();
+  } catch (error) {
+    if (error instanceof LocalBranchError) {
+      throw new ResetError("reset_branch_failed", "Demo reset could not return the workspace to main.");
+    }
+    throw error;
+  }
+}
+
 /**
  * Restores the pre-run state using only the baseline snapshot created by the
  * run orchestrator and removes the generated run artifacts for TICKET-1042.
@@ -46,10 +58,11 @@ export function resetDemo(): DemoResetResult {
   if (workspace === "buggy") {
     rmSync(artifactPath, { force: true });
     rmSync(snapshotPath, { force: true });
+    resetBranch();
     return {
       status: "reset",
       ticketId: DEMO_TICKET_ID,
-      detail: "Planted TICKET-1042 bug restored; ready for a new run.",
+      detail: "Planted TICKET-1042 bug restored; local demo branch removed and main checked out.",
     };
   }
 
@@ -87,9 +100,10 @@ export function resetDemo(): DemoResetResult {
 
   rmSync(artifactPath, { force: true });
   rmSync(snapshotPath, { force: true });
+  resetBranch();
   return {
     status: "reset",
     ticketId: DEMO_TICKET_ID,
-    detail: "Planted TICKET-1042 bug restored; ready for a new run.",
+    detail: "Planted TICKET-1042 bug restored; local demo branch removed and main checked out.",
   };
 }
