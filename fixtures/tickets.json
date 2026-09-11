@@ -1,0 +1,54 @@
+[
+  {
+    "id": "TICKET-1042",
+    "source": "pagerduty",
+    "severity": "SEV-2",
+    "status": "triggered",
+    "service": "claims-api",
+    "created_at": "2026-09-10T05:14:00Z",
+    "title": "Duplicate claim submission detected — claims-api",
+    "summary": "Payer clearinghouse rejected claim CLM-2381 as a duplicate. Submission log shows two outbound POSTs for the same claim ~40s apart after a gateway timeout and automatic retry.",
+    "alert_body": "Monitor: claims-submission-duplicate-check\nService: claims-api (prod)\nClaim ID: CLM-2381\nPatient ID: PT-0417 (synthetic)\nPayer: fixture-payer-01\nFirst submission: 2026-09-10T05:11:22Z (timed out after 8000ms)\nRetry submission: 2026-09-10T05:12:01Z (succeeded, HTTP 201)\nClearinghouse response: 277CA duplicate-claim flag, ref DUP-88213\nOn-call: paged EM (Marcus), Revenue Cycle Platform\nRunbook: none — first time this alert has fired for this service",
+    "wired": true,
+    "notes_for_demo": "This is the one fully-wired ticket. Ticketdroid should run RCA + patch + PR against this."
+  },
+  {
+    "id": "TICKET-1038",
+    "source": "sentry",
+    "severity": "SEV-3",
+    "status": "triggered",
+    "service": "scheduling-api",
+    "created_at": "2026-09-08T14:02:00Z",
+    "title": "Intermittent double-booking on appointment reschedule",
+    "summary": "Two appointment slots created for the same patient/provider pair when a reschedule request is submitted twice in quick succession (likely a double-click on the patient portal).",
+    "alert_body": "Error: SlotConflictWarning (non-fatal)\nService: scheduling-api\nOccurrences: 6 in last 24h\nFirst seen: 2026-09-08T14:02:11Z",
+    "wired": false,
+    "notes_for_demo": "Fixture only — shows the inbox has more than one signal type. Do not build a fix for this one."
+  },
+  {
+    "id": "TICKET-1029",
+    "source": "pagerduty",
+    "severity": "SEV-3",
+    "status": "acknowledged",
+    "service": "ehr-interface-gateway",
+    "created_at": "2026-09-06T09:40:00Z",
+    "title": "HL7 ADT feed lag exceeding 15 min threshold",
+    "summary": "Outbound ADT (admit/discharge/transfer) messages queuing with rising lag; no failures yet.",
+    "alert_body": "Monitor: hl7-adt-queue-lag\nCurrent lag: 17m\nQueue depth: 412 messages\nService: ehr-interface-gateway",
+    "wired": false,
+    "notes_for_demo": "Fixture only. Useful if asked 'what else is in the inbox' — do not build."
+  },
+  {
+    "id": "TICKET-1015",
+    "source": "sentry",
+    "severity": "SEV-4",
+    "status": "resolved",
+    "service": "claims-api",
+    "created_at": "2026-09-02T22:10:00Z",
+    "title": "Nightly claims batch export job ran 40 min longer than baseline",
+    "summary": "Batch export to payer clearinghouse completed but exceeded the SLA window; no data loss.",
+    "alert_body": "Job: nightly-claims-export\nBaseline duration: 12m\nActual duration: 52m\nStatus: completed, resolved by platform team without code change",
+    "wired": false,
+    "notes_for_demo": "Fixture only, already resolved — good example of 'not everything needs an agent run.'"
+  }
+]

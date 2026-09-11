@@ -1,0 +1,24 @@
+{
+  "name": "@ticketdroid/claims-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "test": "vitest run",
+    "gate": "tsx src/gate/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "express": "5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "^22.10.0",
+    "tsx": "4.23.13",
+    "typescript": "6.0.2",
+    "vitest": "5.0.0"
+  }
+}
