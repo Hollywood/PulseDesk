@@ -7,7 +7,7 @@ import express, {
 import type { WorkspaceState } from "../gate/certify.js";
 import { resolveWorkspaceState } from "../gate/state.js";
 import { activeStrategyPath } from "../gate/run-tests.js";
-import { createLocalDemoBranch, resetLocalDemoBranch } from "../demo/branch.js";
+import { createLocalDemoBranch, LocalBranchError, resetLocalDemoBranch } from "../demo/branch.js";
 import { resetDemo, ResetError, type DemoResetResult } from "../demo/reset.js";
 import { buildDemoStatus } from "../demo/status.js";
 import { createHttpLogger, createLogger, type Logger } from "../logger.js";
@@ -125,7 +125,7 @@ export function createApp(deps: AppDeps = defaultDeps(), logger: Logger = defaul
       const run = await deps.startRun(id);
       res.status(201).json(run);
     } catch (error) {
-      if (error instanceof RunError) {
+      if (error instanceof RunError || error instanceof LocalBranchError) {
         boundedError(res, 409, error.code, error.message);
         return;
       }

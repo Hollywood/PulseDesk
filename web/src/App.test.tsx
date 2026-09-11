@@ -190,8 +190,12 @@ beforeEach(() => {
           headers: { "Content-Type": "application/json" },
         });
       }
+      const isErrorBody =
+        typeof body === "object" &&
+        body !== null &&
+        "error" in body;
       return new Response(JSON.stringify(body), {
-        status: key.startsWith("POST ") ? 201 : 200,
+        status: isErrorBody ? 409 : key.startsWith("POST ") ? 201 : 200,
         headers: { "Content-Type": "application/json" },
       });
     }),
@@ -406,6 +410,23 @@ describe("detail view", () => {
 
     expect(await screen.findByText(/Workspace is patched; reset is required before a new run/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Run Ticketdroid" })).not.toBeInTheDocument();
+  });
+
+  it("offers reset when a local run branch blocks a retry", async () => {
+    routes["POST /api/tickets/TICKET-1042/run"] = {
+      error: { code: "branch_exists", message: "The local demo branch already exists; reset the demo before starting another run." },
+    };
+    routes["POST /api/demo/reset"] = {
+      status: "reset",
+      ticketId: "TICKET-1042",
+      detail: "Planted TICKET-1042 bug restored; local demo branch removed and main checked out.",
+    };
+    await renderApp();
+    await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
+    await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
+
+    expect(await screen.findByText(/local demo branch already exists/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset demo" })).toBeInTheDocument();
   });
 });
 
