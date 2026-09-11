@@ -146,12 +146,15 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
             <p className="run__result">{run.message}</p>
           </div>
         ) : run.status === "error" ? (
-          <>
+          <div className="run__actions">
             <button type="button" className="run__button" onClick={() => void handleRun()}>
               Retry run
             </button>
+            <button type="button" className="run__reset-button" onClick={() => void handleReset()}>
+              Reset demo
+            </button>
             <p className="run__result run__result--error">{run.message}</p>
-          </>
+          </div>
         ) : (
           <>
             <button type="button" className="run__button" onClick={() => void handleRun()}>
