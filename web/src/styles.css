@@ -451,6 +451,117 @@ code {
   background: var(--surface);
 }
 
+/* ---------- Live droid session ---------- */
+
+.run-live {
+  margin-top: 16px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.run-live__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.run-live__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.run-live__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pulse);
+  animation: run-live-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes run-live-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .run-live__pulse {
+    animation: none;
+  }
+}
+
+.run-live__metrics {
+  display: flex;
+  gap: 18px;
+  margin: 0 0 0 auto;
+}
+
+.run-live__metrics div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.run-live__metrics dt {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.run-live__metrics dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.run-live__session {
+  color: var(--text-muted);
+}
+
+.run-live__focus {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.run-live__actions {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+}
+
+.run-live__actions li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.run-live__tool {
+  flex: none;
+  min-width: 74px;
+  font-family: var(--mono);
+  color: var(--accent);
+}
+
+.run-live__detail {
+  font-family: var(--mono);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 /* ---------- Run view / PR view ---------- */
 
 .run-view {

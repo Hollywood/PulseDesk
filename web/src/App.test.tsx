@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import type { Ticket, TicketRunResult } from "./types";
@@ -431,5 +431,87 @@ describe("error handling", () => {
     await waitFor(() => {
       expect(screen.getByText(/Could not reach the claims-api service/)).toBeInTheDocument();
     });
+  });
+});
+
+describe("live droid session", () => {
+  class FakeEventSource {
+    static last: FakeEventSource | null = null;
+    onmessage: ((event: MessageEvent<string>) => void) | null = null;
+    onerror: (() => void) | null = null;
+    closed = false;
+
+    constructor(readonly url: string) {
+      FakeEventSource.last = this;
+    }
+
+    close(): void {
+      this.closed = true;
+    }
+
+    emit(payload: unknown): void {
+      this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(payload) }));
+    }
+  }
+
+  /** Opens the detail view with the run POST left pending, so the running state stays on screen. */
+  async function startPendingRun() {
+    const passthrough = vi.mocked(globalThis.fetch).getMockImplementation();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST" && String(input).includes("/run")) {
+          return new Promise<Response>(() => {});
+        }
+        return passthrough!(input, init);
+      }),
+    );
+    vi.stubGlobal("EventSource", FakeEventSource);
+
+    await renderApp();
+    await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
+    await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
+    return await waitFor(() => {
+      expect(FakeEventSource.last).not.toBeNull();
+      return FakeEventSource.last!;
+    });
+  }
+
+  it("subscribes to the run event stream for the ticket being run", async () => {
+    const source = await startPendingRun();
+    expect(source.url).toBe("/api/tickets/TICKET-1042/run/events");
+    expect(screen.getByText("Droid session in progress")).toBeInTheDocument();
+    expect(screen.getByText(/Starting a Factory droid session/)).toBeInTheDocument();
+  });
+
+  it("renders the droid's streamed reasoning and repository actions", async () => {
+    const source = await startPendingRun();
+
+    await act(async () => {
+      source.emit({ kind: "session", at: 1, sessionId: "5fcc2798-d0da-413a" });
+      source.emit({ kind: "thinking", at: 2, text: "Checking the retry path" });
+      source.emit({ kind: "activity", at: 3, tool: "Grep", detail: "idempotency" });
+      source.emit({ kind: "activity", at: 4, tool: "ApplyPatch", detail: "claims-api/src/domain/active-strategy.ts" });
+    });
+
+    expect(screen.getByText("Checking the retry path")).toBeInTheDocument();
+    expect(screen.getByText("Grep")).toBeInTheDocument();
+    expect(screen.getByText("ApplyPatch")).toBeInTheDocument();
+    expect(screen.getByText("claims-api/src/domain/active-strategy.ts")).toBeInTheDocument();
+    // Action count and session id give the demo a sense of progress.
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("5fcc2798")).toBeInTheDocument();
+  });
+
+  it("closes the stream once the run resolves", async () => {
+    routes["POST /api/tickets/TICKET-1042/run"] = runResult;
+    vi.stubGlobal("EventSource", FakeEventSource);
+
+    await renderApp();
+    await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
+    await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
+
+    expect(await screen.findByText("Run complete")).toBeInTheDocument();
+    expect(FakeEventSource.last?.closed).toBe(true);
   });
 });

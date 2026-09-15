@@ -9,6 +9,7 @@ import {
   computeWorkingTreeDiff,
   evaluateExecEnvelope,
   normalizeFactoryOutput,
+  parseDebugEvent,
   runTicketViaFactory,
   type FactoryOutput,
   type FactorySessionInvoker,
@@ -312,5 +313,53 @@ describe("runTicketViaFactory", () => {
     await expect(
       runTicketViaFactory("TICKET-1042", { root: repo, invoke, workspaceState: "buggy" }),
     ).rejects.toMatchObject({ code: "factory_output_invalid" });
+  });
+});
+
+describe("parseDebugEvent", () => {
+  const at = 1_700_000_000_000;
+
+  it("reports the Factory session id from the init event", () => {
+    const line = JSON.stringify({ type: "system", subtype: "init", session_id: "5fcc2798-d0da" });
+    expect(parseDebugEvent(line, at)).toEqual({ kind: "session", at, sessionId: "5fcc2798-d0da" });
+  });
+
+  it("turns a tool call into an activity with a repo-relative target", () => {
+    const line = JSON.stringify({
+      type: "tool_call",
+      toolName: "Read",
+      parameters: { file_path: "/repo/claims-api/src/domain/active-strategy.ts" },
+    });
+    expect(parseDebugEvent(line, at, "/repo")).toEqual({
+      kind: "activity",
+      at,
+      tool: "Read",
+      detail: "claims-api/src/domain/active-strategy.ts",
+    });
+  });
+
+  it("summarizes reasoning to a single plain line", () => {
+    const line = JSON.stringify({ type: "reasoning", text: "**Planning the fix**\n\nInspect the retry path next." });
+    expect(parseDebugEvent(line, at)).toEqual({ kind: "thinking", at, text: "Planning the fix" });
+  });
+
+  it("keeps assistant messages and drops the prompt echoed back as a user message", () => {
+    const assistant = JSON.stringify({ type: "message", role: "assistant", text: "Patch applied; running tests." });
+    expect(parseDebugEvent(assistant, at)).toEqual({ kind: "message", at, text: "Patch applied; running tests." });
+    expect(parseDebugEvent(JSON.stringify({ type: "message", role: "user", text: "prompt" }), at)).toBeNull();
+  });
+
+  it("ignores completion, tool results, malformed lines, and empty text", () => {
+    expect(parseDebugEvent(JSON.stringify({ type: "completion", finalText: "{}" }), at)).toBeNull();
+    expect(parseDebugEvent(JSON.stringify({ type: "tool_result", value: "ok" }), at)).toBeNull();
+    expect(parseDebugEvent("not json", at)).toBeNull();
+    expect(parseDebugEvent(JSON.stringify({ type: "reasoning", text: "   " }), at)).toBeNull();
+  });
+
+  it("bounds long activity detail so a stream cannot flood the run view", () => {
+    const line = JSON.stringify({ type: "tool_call", toolName: "Execute", parameters: { command: "x".repeat(400) } });
+    const event = parseDebugEvent(line, at);
+    expect(event?.kind).toBe("activity");
+    expect(event !== null && "detail" in event && event.detail.length).toBeLessThanOrEqual(141);
   });
 });

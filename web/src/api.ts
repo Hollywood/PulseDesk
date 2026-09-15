@@ -1,4 +1,4 @@
-import type { DemoResetResult, Ticket, TicketRunResult } from "./types";
+import type { DemoResetResult, RunEvent, Ticket, TicketRunResult } from "./types";
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path, {
@@ -42,6 +42,27 @@ export async function startTicketRun(id: string): Promise<TicketRunResult> {
     throw new Error(await errorMessage(res));
   }
   return (await res.json()) as TicketRunResult;
+}
+
+/**
+ * Follows live progress of an in-flight run. Returns an unsubscribe function.
+ * Streaming is best-effort presentation: when the browser has no EventSource
+ * the run still completes through the POST, just without a live feed.
+ */
+export function subscribeRunEvents(id: string, onEvent: (event: RunEvent) => void): () => void {
+  if (typeof EventSource === "undefined") {
+    return () => {};
+  }
+  const source = new EventSource(`/api/tickets/${encodeURIComponent(id)}/run/events`);
+  source.onmessage = (message: MessageEvent<string>) => {
+    try {
+      onEvent(JSON.parse(message.data) as RunEvent);
+    } catch {
+      // Ignore malformed frames; the run result is authoritative.
+    }
+  };
+  source.onerror = () => source.close();
+  return () => source.close();
 }
 
 /** Reads the recorded run for a ticket, or null when no run exists yet. */

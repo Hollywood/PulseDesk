@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
-import { fetchDemoStatus, fetchTicketRun, resetDemo, startTicketRun } from "./api";
-import type { Ticket, TicketRunResult } from "./types";
+import { useEffect, useRef, useState } from "react";
+import { fetchDemoStatus, fetchTicketRun, resetDemo, startTicketRun, subscribeRunEvents } from "./api";
+import type { RunEvent, Ticket, TicketRunResult } from "./types";
 import { SeverityBadge, StatusBadge } from "./ui/badges";
 import { DetailMetadata, SourceLabel } from "./ui/metadata";
+import { RunLiveView } from "./RunLiveView";
 import { RunResultView } from "./RunResultView";
 
 type RunState =
   | { status: "loading" }
   | { status: "idle" }
-  | { status: "running" }
+  | { status: "running"; startedAt: number; events: readonly RunEvent[] }
   | { status: "resetting" }
   | { status: "blocked"; message: string }
   | { status: "error"; message: string }
@@ -16,6 +17,15 @@ type RunState =
 
 export function TicketDetail({ ticket }: { ticket: Ticket }) {
   const [run, setRun] = useState<RunState>({ status: "idle" });
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  useEffect(
+    () => () => {
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +61,13 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
   }, [ticket.id]);
 
   async function handleRun(): Promise<void> {
-    setRun({ status: "running" });
+    setRun({ status: "running", startedAt: Date.now(), events: [] });
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = subscribeRunEvents(ticket.id, (event) => {
+      setRun((current) =>
+        current.status === "running" ? { ...current, events: [...current.events, event] } : current,
+      );
+    });
     try {
       const result = await startTicketRun(ticket.id);
       setRun({ status: "ready", run: result });
@@ -59,6 +75,9 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
       const message =
         error instanceof Error && error.message.length > 0 ? error.message : "The run could not be completed.";
       setRun({ status: "error", message });
+    } finally {
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
     }
   }
 
@@ -124,8 +143,9 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
             <button type="button" className="run__button" disabled>
               Running Ticketdroid…
             </button>
+            <RunLiveView events={run.events} startedAt={run.startedAt} />
             <p className="run__result">
-              A Factory droid is processing the ticket — intake → code search → hypothesis → patch. This takes a few minutes.
+              A Factory droid is working in the repository on branch ticketdroid/{ticket.id}. This takes a few minutes.
             </p>
           </>
         ) : run.status === "resetting" ? (

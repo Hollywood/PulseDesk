@@ -76,6 +76,18 @@ export interface PrSummary {
   humanVerification: string[];
 }
 
+/**
+ * Live progress from an in-flight droid session, streamed by claims-api while
+ * the run is still working. Demo telemetry only: the recorded run result stays
+ * the source of truth for evidence.
+ */
+export type RunEvent =
+  | { kind: "session"; at: number; sessionId: string }
+  | { kind: "activity"; at: number; tool: string; detail: string }
+  | { kind: "thinking"; at: number; text: string }
+  | { kind: "message"; at: number; text: string }
+  | { kind: "finished"; at: number; ok: boolean; detail: string };
+
 export interface DemoResetResult {
   status: "reset";
   ticketId: string;

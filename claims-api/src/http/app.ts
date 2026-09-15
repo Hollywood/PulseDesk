@@ -11,6 +11,7 @@ import { createLocalDemoBranch, LocalBranchError, resetLocalDemoBranch } from ".
 import { resetDemo, ResetError, type DemoResetResult } from "../demo/reset.js";
 import { buildDemoStatus } from "../demo/status.js";
 import { createHttpLogger, createLogger, type Logger } from "../logger.js";
+import { clearRunEvents, runEvents, type RunEvent } from "../run/events.js";
 import { runTicketViaFactory, listIgnoredFiles, listUntrackedFiles } from "../run/factory.js";
 import { readRunArtifact, writeRunArtifact, writeUntrackedSnapshot } from "../run/store.js";
 import { RunError, type TicketRunResult } from "../run/types.js";
@@ -46,11 +47,22 @@ export function defaultDeps(): AppDeps {
         files: listUntrackedFiles(process.cwd()),
         ignored: listIgnoredFiles(process.cwd()),
       });
+      const stream = runEvents(ticketId);
+      stream.begin();
       try {
-        const result = await runTicketViaFactory(ticketId, { branchName });
+        const result = await runTicketViaFactory(ticketId, {
+          branchName,
+          onEvent: (event) => stream.publish(event),
+        });
         writeRunArtifact(ticketId, result);
+        stream.end(true, "Run complete: the RCA, test evidence, and PR view are ready.", Date.now());
         return result;
       } catch (error) {
+        stream.end(
+          false,
+          error instanceof RunError ? error.message : "The run could not be completed.",
+          Date.now(),
+        );
         try {
           resetLocalDemoBranch();
         } catch {
@@ -118,6 +130,48 @@ export function createApp(deps: AppDeps = defaultDeps(), logger: Logger = defaul
     res.status(200).json(run);
   });
 
+  /**
+   * Live progress for an in-flight run, as Server-Sent Events. Recorded history
+   * is replayed first so a late subscriber catches up, then new events stream
+   * until the run ends. When no run is streaming the response closes right away
+   * instead of holding the connection open.
+   */
+  app.get("/api/tickets/:id/run/events", (req: Request, res: Response) => {
+    const id = paramId(req);
+    if (deps.getTickets().find((entry) => entry.id === id) === undefined) {
+      boundedError(res, 404, "ticket_not_found", "No ticket exists with the requested id.");
+      return;
+    }
+    const stream = runEvents(id);
+    res.status(200).set({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    res.flushHeaders();
+
+    const send = (event: RunEvent): void => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+    for (const event of stream.replay()) {
+      send(event);
+    }
+    if (!stream.isActive()) {
+      res.end();
+      return;
+    }
+
+    const heartbeat = setInterval(() => res.write(": keep-alive\n\n"), 15_000);
+    const unsubscribe = stream.subscribe(send, () => {
+      clearInterval(heartbeat);
+      res.end();
+    });
+    res.on("close", () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  });
+
   app.post("/api/tickets/:id/run", async (req: Request, res: Response) => {
     const id = paramId(req);
     const ticket = deps.getTickets().find((entry) => entry.id === id);
@@ -155,7 +209,9 @@ export function createApp(deps: AppDeps = defaultDeps(), logger: Logger = defaul
       return;
     }
     try {
-      res.status(200).json(deps.resetDemo());
+      const result = deps.resetDemo();
+      clearRunEvents();
+      res.status(200).json(result);
     } catch (error) {
       if (error instanceof ResetError) {
         boundedError(res, 409, error.code, error.message);

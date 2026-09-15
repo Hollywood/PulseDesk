@@ -1,8 +1,9 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { RunEvent } from "./events.js";
 import type { WorkspaceState } from "../gate/certify.js";
 import { resolveWorkspaceState } from "../gate/state.js";
 import { activeStrategyPath } from "../gate/run-tests.js";
@@ -31,6 +32,8 @@ export interface FactorySessionInvokerArgs {
   schema: unknown;
   /** Hard cap for one droid session, in milliseconds. */
   timeoutMs?: number;
+  /** Receives live progress while the droid works, for the run view. */
+  onEvent?: (event: RunEvent) => void;
   signal?: AbortSignal;
 }
 
@@ -54,6 +57,8 @@ export interface FactoryRunOptions {
   timeoutMs?: number;
   /** Injectable droid invoker for deterministic tests. */
   invoke?: FactorySessionInvoker;
+  /** Receives live progress while the droid works, for the run view. */
+  onEvent?: (event: RunEvent) => void;
   now?: () => number;
   /** Workspace classification gate override for deterministic tests. */
   workspaceState?: WorkspaceState;
@@ -118,71 +123,208 @@ export function evaluateExecEnvelope(envelope: ExecResultEnvelope): FactorySessi
   };
 }
 
+/** Condenses a droid's prose to one short line for the live run view. */
+function summarizeText(text: string, root: string): string {
+  const firstLine = text
+    .split("\n")
+    .map((line) => line.replaceAll("*", "").replaceAll("#", "").trim())
+    .find((line) => line.length > 0);
+  return boundaryTrim(relativizePaths(firstLine ?? "", root), 180);
+}
+
+function relativizePaths(text: string, root: string): string {
+  return text.replaceAll(`${root.replace(/\/$/, "")}/`, "");
+}
+
+/** Describes a tool call's target the way the run view shows it. */
+function describeToolCall(parameters: unknown, root: string): string {
+  if (typeof parameters !== "object" || parameters === null) {
+    return "";
+  }
+  const values = parameters as Record<string, unknown>;
+  for (const key of ["file_path", "command", "pattern", "patterns", "directory_path", "query", "skill", "url"]) {
+    const value = values[key];
+    if (typeof value === "string" && value.trim() !== "") {
+      return boundaryTrim(relativizePaths(value.trim(), root), 140);
+    }
+  }
+  return "";
+}
+
+interface DebugStreamEvent {
+  type?: string;
+  subtype?: string;
+  role?: string;
+  text?: string;
+  toolName?: string;
+  toolId?: string;
+  parameters?: unknown;
+  session_id?: string;
+}
+
 /**
- * Invokes a real Factory droid session with the headless `droid exec` CLI
- * (`--output-format json`). The CLI authenticates with the stored Factory
- * login, so no API key is required, and the session is a genuine Factory
- * session (its id is returned). The agent works in the repository and its
- * final answer is parsed as the structured run output.
+ * Maps one line of `droid exec --output-format debug` NDJSON to a live run
+ * event, or null for lines the run view does not show. Pure so the streaming
+ * contract is unit-testable without launching a droid.
+ */
+export function parseDebugEvent(line: string, at: number, root = ""): RunEvent | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return null;
+  }
+  const event = parsed as DebugStreamEvent;
+
+  if (event.type === "system") {
+    return event.subtype === "init" && typeof event.session_id === "string"
+      ? { kind: "session", at, sessionId: event.session_id }
+      : null;
+  }
+  if (event.type === "tool_call") {
+    const tool = event.toolName ?? event.toolId;
+    return typeof tool === "string" && tool !== ""
+      ? { kind: "activity", at, tool, detail: describeToolCall(event.parameters, root) }
+      : null;
+  }
+  if (event.type === "reasoning" && typeof event.text === "string") {
+    const text = summarizeText(event.text, root);
+    return text === "" ? null : { kind: "thinking", at, text };
+  }
+  if (event.type === "message" && event.role === "assistant" && typeof event.text === "string") {
+    const text = summarizeText(event.text, root);
+    return text === "" ? null : { kind: "message", at, text };
+  }
+  return null;
+}
+
+interface CompletionEvent {
+  type?: string;
+  finalText?: string;
+  durationMs?: number;
+  session_id?: string;
+}
+
+/**
+ * Invokes a real Factory droid session with the headless `droid exec` CLI in
+ * streaming mode (`--output-format debug`). The CLI authenticates with the
+ * stored Factory login, so no API key is required, and the session is a genuine
+ * Factory session (its id is reported). Each streamed event is forwarded to
+ * `onEvent` so the run view can show progress live, and the session's final
+ * answer is parsed as the structured run output.
  */
 export async function invokeDroidViaCli(args: FactorySessionInvokerArgs): Promise<FactorySessionOutcome> {
   const dir = mkdtempSync(path.join(tmpdir(), "ticketdroid-run-"));
   const promptFile = path.join(dir, "prompt.txt");
-  let stdout = "";
-  let failedOutput: { stdout?: string; stderr?: string } | null = null;
+  writeFileSync(promptFile, `${args.prompt}\n\n${args.appendSystemPrompt}\n`, "utf8");
+
+  let completion: CompletionEvent | null = null;
+  let sessionId = "unknown";
+  let stderrTail = "";
+
   try {
-    writeFileSync(promptFile, `${args.prompt}\n\n${args.appendSystemPrompt}\n`, "utf8");
-    stdout = execFileSync(
-      "droid",
-      ["exec", "--cwd", args.cwd, "--auto", "high", "--output-format", "json", "--file", promptFile],
-      {
-        encoding: "utf8",
-        timeout: args.timeoutMs,
-        maxBuffer: 20 * 1024 * 1024,
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-  } catch (error) {
-    const cause = error as { code?: string; signal?: string; stdout?: string; stderr?: string; status?: number };
-    if (cause?.code === "ETIMEDOUT" || cause?.signal === "SIGTERM" || cause?.signal === "SIGKILL") {
+    const exit = await new Promise<{ code: number | null; timedOut: boolean }>((resolve, reject) => {
+      const child = spawn(
+        "droid",
+        ["exec", "--cwd", args.cwd, "--auto", "high", "--output-format", "debug", "--file", promptFile],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+
+      let timedOut = false;
+      const timer =
+        args.timeoutMs === undefined
+          ? null
+          : setTimeout(() => {
+              timedOut = true;
+              child.kill("SIGTERM");
+            }, args.timeoutMs);
+
+      let buffer = "";
+      child.stdout.setEncoding("utf8");
+      child.stdout.on("data", (chunk: string) => {
+        buffer += chunk;
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.trim() === "") {
+            continue;
+          }
+          const streamed = parseDebugEvent(line, Date.now(), args.cwd);
+          if (streamed !== null) {
+            if (streamed.kind === "session") {
+              sessionId = streamed.sessionId;
+            }
+            args.onEvent?.(streamed);
+          }
+          try {
+            const parsed = JSON.parse(line) as CompletionEvent;
+            if (parsed.type === "completion") {
+              completion = parsed;
+            }
+          } catch {
+            // Non-JSON progress noise is ignored; the completion event decides the outcome.
+          }
+        }
+      });
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrTail = boundaryTrim(`${stderrTail}${chunk}`.slice(-2000), 2000);
+      });
+
+      child.on("error", (error: NodeJS.ErrnoException) => {
+        if (timer !== null) {
+          clearTimeout(timer);
+        }
+        reject(
+          error.code === "ENOENT"
+            ? new RunError(
+                "factory_unavailable",
+                "Could not start a Factory droid session because the `droid` CLI is not installed or not on PATH.",
+              )
+            : error,
+        );
+      });
+
+      child.on("close", (code) => {
+        if (timer !== null) {
+          clearTimeout(timer);
+        }
+        resolve({ code, timedOut });
+      });
+    });
+
+    if (exit.timedOut) {
       throw new RunError(
         "factory_timeout",
         "The Factory droid session exceeded its time limit and was stopped. Try the run again.",
       );
     }
-    if (cause?.code === "ENOENT") {
+    if (completion === null) {
       throw new RunError(
         "factory_unavailable",
-        "Could not start a Factory droid session because the `droid` CLI is not installed or not on PATH.",
+        "Could not start a Factory droid session. Start the Factory app (or authenticate the droid CLI once), then retry.",
       );
     }
-    // The CLI exits non-zero on failed sessions but still prints the JSON envelope.
-    failedOutput = { stdout: cause.stdout, stderr: cause.stderr };
+
+    const finished: CompletionEvent = completion;
+    // Reuse the envelope mapping so success, failure, and invalid-JSON handling
+    // stay in one place regardless of which CLI output format produced them.
+    return evaluateExecEnvelope({
+      type: "result",
+      subtype: exit.code === 0 ? "success" : "error",
+      is_error: exit.code !== 0,
+      duration_ms: finished.durationMs,
+      session_id: finished.session_id ?? sessionId,
+      result: finished.finalText,
+      error: { message: stderrTail.trim() === "" ? undefined : stderrTail.trim() },
+    });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-
-  const parseEnvelope = (raw: string): ExecResultEnvelope | null => {
-    try {
-      const parsed = JSON.parse(raw.trim()) as ExecResultEnvelope;
-      return parsed.type === "result" ? parsed : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const envelope =
-    parseEnvelope(stdout) ??
-    (failedOutput !== null ? parseEnvelope(failedOutput.stdout ?? "") ?? parseEnvelope(failedOutput.stderr ?? "") : null);
-
-  if (envelope === null) {
-    throw new RunError(
-      "factory_unavailable",
-      "Could not start a Factory droid session. Start the Factory app (or authenticate the droid CLI once), then retry.",
-    );
-  }
-
-  return evaluateExecEnvelope(envelope);
 }
 
 /** The exact four-step Ticketdroid timeline, in execution order. */
@@ -638,6 +780,7 @@ export async function runTicketViaFactory(
       appendSystemPrompt: SYSTEM_PROMPT_APPEND,
       schema: FACTORY_OUTPUT_SCHEMA,
       timeoutMs,
+      onEvent: options.onEvent,
     });
   } catch (error) {
     if (error instanceof RunError) {

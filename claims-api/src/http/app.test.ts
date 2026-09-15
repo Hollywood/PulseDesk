@@ -3,9 +3,10 @@ import type { AddressInfo } from "node:net";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Express } from "express";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { REGRESSION_CONTRACT } from "../gate/contract.js";
 import type { WorkspaceState } from "../gate/certify.js";
+import { clearRunEvents, runEvents } from "../run/events.js";
 import { RunError, type TicketRunResult } from "../run/types.js";
 import { createApp, defaultDeps, type AppDeps } from "./app.js";
 
@@ -336,4 +337,76 @@ describe("read endpoints remain available in blocked states", () => {
       }
     });
   }
+});
+
+describe("live run events", () => {
+  function appForEvents(): Express {
+    return createApp({
+      getTickets: defaultDeps().getTickets,
+      getWorkspaceState: defaultDeps().getWorkspaceState,
+      startRun: async () => {
+        throw new RunError("factory_unavailable", "not used in this test");
+      },
+      getRun: () => null,
+    });
+  }
+
+  afterEach(() => {
+    clearRunEvents();
+  });
+
+  it("streams progress while a run is in flight and closes when it ends", async () => {
+    const running = await start(appForEvents());
+    try {
+      const stream = runEvents("TICKET-1042");
+      stream.begin();
+      const res = await fetch(`${running.base}/api/tickets/TICKET-1042/run/events`);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/event-stream");
+
+      stream.publish({ kind: "activity", at: 1, tool: "Grep", detail: "idempotency" });
+      stream.publish({ kind: "thinking", at: 2, text: "Checking the retry path" });
+      stream.end(true, "Run complete.", 3);
+
+      const body = await res.text();
+      expect(body).toContain('"tool":"Grep"');
+      expect(body).toContain('"text":"Checking the retry path"');
+      expect(body).toContain('"kind":"finished"');
+      assertNoDisclosure(body);
+    } finally {
+      await stop(running.server);
+    }
+  });
+
+  it("replays a finished run's events and closes instead of hanging when nothing is running", async () => {
+    const running = await start(appForEvents());
+    try {
+      const stream = runEvents("TICKET-1029");
+      stream.begin();
+      stream.publish({ kind: "session", at: 1, sessionId: "5fcc2798-d0da" });
+      stream.end(true, "Run complete.", 2);
+
+      const body = await (await fetch(`${running.base}/api/tickets/TICKET-1029/run/events`)).text();
+      expect(body).toContain('"sessionId":"5fcc2798-d0da"');
+      expect(body).toContain('"kind":"finished"');
+    } finally {
+      await stop(running.server);
+    }
+  });
+
+  it("refuses an unknown ticket with a bounded error", async () => {
+    const running = await start(appForEvents());
+    try {
+      const res = await fetch(`${running.base}/api/tickets/TICKET-0000/run/events`);
+      expect(res.status).toBe(404);
+      const raw = await res.text();
+      expect(JSON.parse(raw)).toEqual({
+        error: { code: "ticket_not_found", message: "No ticket exists with the requested id." },
+      });
+      assertNoDisclosure(raw);
+    } finally {
+      await stop(running.server);
+    }
+  });
 });
