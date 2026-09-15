@@ -8,6 +8,7 @@ import type { WorkspaceState } from "../gate/certify.js";
 import { resolveWorkspaceState } from "../gate/state.js";
 import { activeStrategyPath } from "../gate/run-tests.js";
 import { loadTickets } from "../http/tickets.js";
+import { factorySessionUrl, openFactorySession } from "./open_session.js";
 import {
   RunError,
   type DiffResult,
@@ -57,6 +58,8 @@ export interface FactoryRunOptions {
   timeoutMs?: number;
   /** Injectable droid invoker for deterministic tests. */
   invoke?: FactorySessionInvoker;
+  /** Auto-opens the live Factory session once its id is known; injectable for tests. */
+  openSession?: (sessionId: string) => void;
   /** Receives live progress while the droid works, for the run view. */
   onEvent?: (event: RunEvent) => void;
   now?: () => number;
@@ -187,7 +190,12 @@ export function parseDebugEvent(line: string, at: number, root = ""): RunEvent |
 
   if (event.type === "system") {
     return event.subtype === "init" && typeof event.session_id === "string"
-      ? { kind: "session", at, sessionId: event.session_id }
+      ? {
+          kind: "session",
+          at,
+          sessionId: event.session_id,
+          sessionUrl: factorySessionUrl(event.session_id),
+        }
       : null;
   }
   if (event.type === "tool_call") {
@@ -778,6 +786,19 @@ export async function runTicketViaFactory(
   const baseRef = baseRefForRun(root);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
+  // The first session event carries the live Factory session's id: open it in
+  // the Factory app immediately so the investigation is watchable while the
+  // droid works, then keep streaming progress to the run view.
+  const openSession = options.openSession ?? openFactorySession;
+  let sessionOpened = false;
+  const forwardEvent = (event: RunEvent): void => {
+    if (event.kind === "session" && !sessionOpened) {
+      sessionOpened = true;
+      openSession(event.sessionId);
+    }
+    options.onEvent?.(event);
+  };
+
   let outcome: FactorySessionOutcome;
   try {
     outcome = await (options.invoke ?? invokeDroidViaCli)({
@@ -786,7 +807,7 @@ export async function runTicketViaFactory(
       appendSystemPrompt: SYSTEM_PROMPT_APPEND,
       schema: FACTORY_OUTPUT_SCHEMA,
       timeoutMs,
-      onEvent: options.onEvent,
+      onEvent: forwardEvent,
     });
   } catch (error) {
     if (error instanceof RunError) {

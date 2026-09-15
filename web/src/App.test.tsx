@@ -488,7 +488,12 @@ describe("live droid session", () => {
     const source = await startPendingRun();
 
     await act(async () => {
-      source.emit({ kind: "session", at: 1, sessionId: "5fcc2798-d0da-413a" });
+      source.emit({
+        kind: "session",
+        at: 1,
+        sessionId: "5fcc2798-d0da-413a",
+        sessionUrl: "factory-desktop://sessions/5fcc2798-d0da-413a",
+      });
       source.emit({ kind: "thinking", at: 2, text: "Checking the retry path" });
       source.emit({ kind: "activity", at: 3, tool: "Grep", detail: "idempotency" });
       source.emit({ kind: "activity", at: 4, tool: "ApplyPatch", detail: "claims-api/src/domain/active-strategy.ts" });
@@ -501,6 +506,9 @@ describe("live droid session", () => {
     // Action count and session id give the demo a sense of progress.
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("5fcc2798")).toBeInTheDocument();
+    // The live Factory session is reachable from the run panel.
+    const openLink = screen.getByRole("link", { name: /Open in Factory/ });
+    expect(openLink).toHaveAttribute("href", "factory-desktop://sessions/5fcc2798-d0da-413a");
   });
 
   it("closes the stream once the run resolves", async () => {

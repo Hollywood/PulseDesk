@@ -10,11 +10,14 @@
 3. Click any ticket (TICKET-1042, 1038, 1029, or 1015)
 4. Click Run Ticketdroid — claims-api calls back to Factory, which starts a
    real droid session for the ticket
-5. Narrate the live session panel while it works: elapsed time, the droid's
+5. Watch the live session: the Factory app auto-opens the droid's session as
+   soon as the investigation starts (the run panel's "Open in Factory" link
+   opens the same session if you close it)
+6. Narrate the live session panel while it works: elapsed time, the droid's
    current reasoning, and each repository action as it happens
-6. When the droid finishes, walk Intake → Code search → Hypothesis → Patch
-7. Open PR view (reviewable — no auto-merge, no auto-deploy)
-8. Show human verification checklist
+7. When the droid finishes, walk Intake → Code search → Hypothesis → Patch
+8. Open PR view (reviewable — no auto-merge, no auto-deploy)
+9. Show human verification checklist
 
 Every run happens on a local `ticketdroid/<TICKET-ID>` branch only; it never
 pushes. Reset removes that local branch, untracked run files, and run

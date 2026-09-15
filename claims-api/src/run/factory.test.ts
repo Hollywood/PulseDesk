@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { RunEvent } from "./events.js";
 import { RunError } from "./types.js";
 import {
   buildFactoryPrompt,
@@ -266,6 +267,45 @@ describe("runTicketViaFactory", () => {
     );
   });
 
+  it("auto-opens the live Factory session once the droid session id is known", async () => {
+    const repo = makeRepo();
+    const openSession = vi.fn();
+    const streamed: RunEvent[] = [];
+    const invoke = vi.fn(async (args: FactorySessionInvokerArgs) => {
+      args.onEvent?.({
+        kind: "session",
+        at: 1,
+        sessionId: "sess-1",
+        sessionUrl: "factory-desktop://sessions/sess-1",
+      });
+      args.onEvent?.({ kind: "activity", at: 2, tool: "Read", detail: "AGENTS.md" });
+      return { structuredOutput: validFactoryOutput(), durationMs: 500, sessionId: "sess-1" };
+    });
+
+    await runTicketViaFactory("TICKET-1042", {
+      root: repo,
+      invoke,
+      workspaceState: "buggy",
+      openSession,
+      onEvent: (event) => streamed.push(event),
+    });
+
+    expect(openSession).toHaveBeenCalledExactlyOnceWith("sess-1");
+    expect(streamed.map((event) => event.kind)).toEqual(["session", "activity"]);
+  });
+
+  it("never opens a Factory session when no session id arrives", async () => {
+    const repo = makeRepo();
+    const openSession = vi.fn();
+    await runTicketViaFactory("TICKET-1042", {
+      root: repo,
+      invoke: invokeReturning(validFactoryOutput()),
+      workspaceState: "buggy",
+      openSession,
+    });
+    expect(openSession).not.toHaveBeenCalled();
+  });
+
   it("refuses an unknown ticket without invoking Factory", async () => {
     const repo = makeRepo();
     const invoke = vi.fn();
@@ -319,9 +359,14 @@ describe("runTicketViaFactory", () => {
 describe("parseDebugEvent", () => {
   const at = 1_700_000_000_000;
 
-  it("reports the Factory session id from the init event", () => {
+  it("reports the Factory session id and live-session deep link from the init event", () => {
     const line = JSON.stringify({ type: "system", subtype: "init", session_id: "5fcc2798-d0da" });
-    expect(parseDebugEvent(line, at)).toEqual({ kind: "session", at, sessionId: "5fcc2798-d0da" });
+    expect(parseDebugEvent(line, at)).toEqual({
+      kind: "session",
+      at,
+      sessionId: "5fcc2798-d0da",
+      sessionUrl: "factory-desktop://sessions/5fcc2798-d0da",
+    });
   });
 
   it("turns a tool call into an activity with a repo-relative target", () => {

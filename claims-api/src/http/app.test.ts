@@ -384,11 +384,17 @@ describe("live run events", () => {
     try {
       const stream = runEvents("TICKET-1029");
       stream.begin();
-      stream.publish({ kind: "session", at: 1, sessionId: "5fcc2798-d0da" });
+      stream.publish({
+        kind: "session",
+        at: 1,
+        sessionId: "5fcc2798-d0da",
+        sessionUrl: "factory-desktop://sessions/5fcc2798-d0da",
+      });
       stream.end(true, "Run complete.", 2);
 
       const body = await (await fetch(`${running.base}/api/tickets/TICKET-1029/run/events`)).text();
       expect(body).toContain('"sessionId":"5fcc2798-d0da"');
+      expect(body).toContain('"sessionUrl":"factory-desktop://sessions/5fcc2798-d0da"');
       expect(body).toContain('"kind":"finished"');
     } finally {
       await stop(running.server);

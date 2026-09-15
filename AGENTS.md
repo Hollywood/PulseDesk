@@ -21,6 +21,9 @@ evidence that claims-api records and the web PR view renders.
   bounded error. Do not route runs through the deterministic local
   orchestration (`runTicket`) — it remains only as the planted-bug gate/CI
   validation, not the app's run path.
+- When a run's droid session starts, claims-api auto-opens it in the Factory
+  desktop app (deep link `factory-desktop://sessions/<id>`), so the live
+  investigation is watchable; the web run panel links to the same session.
 - Runs happen on a per-ticket local branch (`ticketdroid/<TICKET-ID>`); the
   droid commits its work there and claims-api computes the genuine git diff.
 - Demo reset is git-based: it returns to `main`, deletes all

@@ -5,7 +5,13 @@
  * run evidence (the recorded artifact remains the source of truth).
  */
 export type RunEvent =
-  | { kind: "session"; at: number; sessionId: string }
+  | {
+      kind: "session";
+      at: number;
+      sessionId: string;
+      /** Deep link that opens this live session in the Factory desktop app. */
+      sessionUrl: string;
+    }
   | { kind: "activity"; at: number; tool: string; detail: string }
   | { kind: "thinking"; at: number; text: string }
   | { kind: "message"; at: number; text: string }

@@ -11,7 +11,9 @@ function formatElapsed(ms: number): string {
 
 /**
  * Live view of the droid session behind an in-flight run: elapsed time, what
- * the droid is reasoning about, and the actions it is taking in the repository.
+ * the droid is reasoning about, the actions it is taking in the repository,
+ * and a link to the session itself in the Factory app (which the run also
+ * auto-opens on the machine running claims-api).
  */
 export function RunLiveView({ events, startedAt }: { events: readonly RunEvent[]; startedAt: number }) {
   const [now, setNow] = useState(() => Date.now());
@@ -48,6 +50,11 @@ export function RunLiveView({ events, startedAt }: { events: readonly RunEvent[]
             </div>
           ) : null}
         </dl>
+        {session !== undefined ? (
+          <a className="run-live__link" href={session.sessionUrl}>
+            Open in Factory ↗
+          </a>
+        ) : null}
       </header>
 
       <p className="run-live__focus">
