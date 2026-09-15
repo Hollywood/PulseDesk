@@ -515,3 +515,75 @@ describe("live droid session", () => {
     expect(FakeEventSource.last?.closed).toBe(true);
   });
 });
+
+describe("reattaching to a run in flight", () => {
+  class FakeEventSource {
+    static last: FakeEventSource | null = null;
+    onmessage: ((event: MessageEvent<string>) => void) | null = null;
+    onerror: (() => void) | null = null;
+    closed = false;
+
+    constructor(readonly url: string) {
+      FakeEventSource.last = this;
+    }
+
+    close(): void {
+      this.closed = true;
+    }
+
+    emit(payload: unknown): void {
+      this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(payload) }));
+    }
+  }
+
+  it("shows the live session for a run started elsewhere, then lands on the recorded result", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    // No run recorded yet, so the view opens idle but still follows the stream.
+    await renderApp("#/tickets/TICKET-1042");
+    expect(screen.getByRole("button", { name: "Run Ticketdroid" })).toBeInTheDocument();
+
+    const source = await waitFor(() => {
+      expect(FakeEventSource.last).not.toBeNull();
+      return FakeEventSource.last!;
+    });
+
+    await act(async () => {
+      source.emit({ kind: "activity", at: 1_000, tool: "Grep", detail: "idempotency" });
+    });
+    expect(screen.getByText("Droid session in progress")).toBeInTheDocument();
+    expect(screen.getByText("Grep")).toBeInTheDocument();
+
+    // The run finishes elsewhere; the recorded artifact resolves the view.
+    routes["/api/tickets/TICKET-1042/run"] = runResult;
+    await act(async () => {
+      source.emit({ kind: "finished", at: 2_000, ok: true, detail: "Run complete." });
+    });
+
+    expect(await screen.findByText("Run complete")).toBeInTheDocument();
+    expect(source.closed).toBe(true);
+  });
+
+  it("surfaces a failed run reported on the stream", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    await renderApp("#/tickets/TICKET-1042");
+    expect(screen.getByRole("button", { name: "Run Ticketdroid" })).toBeInTheDocument();
+    const source = await waitFor(() => {
+      expect(FakeEventSource.last).not.toBeNull();
+      return FakeEventSource.last!;
+    });
+
+    await act(async () => {
+      source.emit({ kind: "activity", at: 1_000, tool: "Read", detail: "fixtures/tickets.json" });
+      source.emit({
+        kind: "finished",
+        at: 2_000,
+        ok: false,
+        detail: "The Factory droid session exceeded its time limit and was stopped.",
+      });
+    });
+
+    expect(
+      await screen.findByText("The Factory droid session exceeded its time limit and was stopped."),
+    ).toBeInTheDocument();
+  });
+});

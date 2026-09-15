@@ -19,13 +19,7 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
   const [run, setRun] = useState<RunState>({ status: "idle" });
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
-  useEffect(
-    () => () => {
-      unsubscribeRef.current?.();
-      unsubscribeRef.current = null;
-    },
-    [],
-  );
+  useEffect(() => () => stopFollowing(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +40,9 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
         }
         if (status.gate === "expected_red") {
           setRun({ status: "idle" });
+          // A run may already be in flight from another tab or before a reload;
+          // the stream closes immediately when it is not, so this costs nothing.
+          follow(null);
         } else {
           setRun({ status: "blocked", message: status.detail });
         }
@@ -60,14 +57,45 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
     };
   }, [ticket.id]);
 
-  async function handleRun(): Promise<void> {
-    setRun({ status: "running", startedAt: Date.now(), events: [] });
+  function stopFollowing(): void {
     unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+  }
+
+  /**
+   * Follows the droid session's live events. `startedAt` is null when the run
+   * was started elsewhere, in which case the first event's timestamp is used.
+   * A finished event resolves the view from the recorded run, so a reloaded page
+   * still lands on the result.
+   */
+  function follow(startedAt: number | null): void {
+    stopFollowing();
     unsubscribeRef.current = subscribeRunEvents(ticket.id, (event) => {
+      if (event.kind === "finished") {
+        stopFollowing();
+        void (async () => {
+          const recorded = await fetchTicketRun(ticket.id).catch(() => null);
+          if (recorded !== null) {
+            setRun({ status: "ready", run: recorded });
+          } else if (!event.ok) {
+            setRun({ status: "error", message: event.detail });
+          } else {
+            setRun({ status: "idle" });
+          }
+        })();
+        return;
+      }
       setRun((current) =>
-        current.status === "running" ? { ...current, events: [...current.events, event] } : current,
+        current.status === "running"
+          ? { ...current, events: [...current.events, event] }
+          : { status: "running", startedAt: startedAt ?? event.at, events: [event] },
       );
     });
+  }
+
+  async function handleRun(): Promise<void> {
+    setRun({ status: "running", startedAt: Date.now(), events: [] });
+    follow(Date.now());
     try {
       const result = await startTicketRun(ticket.id);
       setRun({ status: "ready", run: result });
@@ -76,12 +104,12 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
         error instanceof Error && error.message.length > 0 ? error.message : "The run could not be completed.";
       setRun({ status: "error", message });
     } finally {
-      unsubscribeRef.current?.();
-      unsubscribeRef.current = null;
+      stopFollowing();
     }
   }
 
   async function handleReset(): Promise<void> {
+    stopFollowing();
     setRun({ status: "resetting" });
     try {
       await resetDemo();

@@ -356,6 +356,19 @@ describe("parseDebugEvent", () => {
     expect(parseDebugEvent(JSON.stringify({ type: "reasoning", text: "   " }), at)).toBeNull();
   });
 
+  it("never shows an absolute workspace path in the run view", () => {
+    const listRoot = JSON.stringify({ type: "tool_call", toolName: "LS", parameters: { directory_path: "/repo" } });
+    expect(parseDebugEvent(listRoot, at, "/repo")).toEqual({ kind: "activity", at, tool: "LS", detail: "repo root" });
+
+    const command = JSON.stringify({
+      type: "tool_call",
+      toolName: "Execute",
+      parameters: { command: "git -C /repo status --short" },
+    });
+    const event = parseDebugEvent(command, at, "/repo");
+    expect(event !== null && "detail" in event && event.detail.includes("/repo")).toBe(false);
+  });
+
   it("bounds long activity detail so a stream cannot flood the run view", () => {
     const line = JSON.stringify({ type: "tool_call", toolName: "Execute", parameters: { command: "x".repeat(400) } });
     const event = parseDebugEvent(line, at);

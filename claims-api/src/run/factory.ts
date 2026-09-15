@@ -132,8 +132,13 @@ function summarizeText(text: string, root: string): string {
   return boundaryTrim(relativizePaths(firstLine ?? "", root), 180);
 }
 
+/** Keeps absolute workspace paths out of the run view; everything shows repo-relative. */
 function relativizePaths(text: string, root: string): string {
-  return text.replaceAll(`${root.replace(/\/$/, "")}/`, "");
+  if (root === "") {
+    return text;
+  }
+  const base = root.replace(/\/$/, "");
+  return text.replaceAll(`${base}/`, "").replaceAll(base, "").replace(/\s{2,}/g, " ").trim();
 }
 
 /** Describes a tool call's target the way the run view shows it. */
@@ -145,7 +150,8 @@ function describeToolCall(parameters: unknown, root: string): string {
   for (const key of ["file_path", "command", "pattern", "patterns", "directory_path", "query", "skill", "url"]) {
     const value = values[key];
     if (typeof value === "string" && value.trim() !== "") {
-      return boundaryTrim(relativizePaths(value.trim(), root), 140);
+      const relative = relativizePaths(value.trim(), root);
+      return boundaryTrim(relative === "" ? "repo root" : relative, 140);
     }
   }
   return "";
