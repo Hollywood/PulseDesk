@@ -6,6 +6,19 @@ import type { Ticket, TicketRunResult } from "./types";
 
 const fixture = [
   {
+    id: "TICKET-1051",
+    source: "sentry",
+    severity: "SEV-3",
+    status: "triggered",
+    service: "claims-status-api",
+    created_at: "2026-09-12T08:00:00Z",
+    title: "Member identifier leaked in claim-status debug logs",
+    summary: "claim-status-api emits the raw memberId into debug log records; downstream shipping retains it.",
+    alert_body: "Service: claims-status-api\nSample excerpt: event=claim_status_check memberId=MBR-0001 claimId=CLM-2381",
+    wired: true,
+    notes_for_demo: "",
+  },
+  {
     id: "TICKET-1042",
     source: "pagerduty",
     severity: "SEV-2",
@@ -242,9 +255,10 @@ describe("inbox", () => {
     }
 
     // Per-row badges (status + severity) and service, for every ticket.
-    expect(screen.getAllByTestId("status")).toHaveLength(4);
-    expect(screen.getAllByTestId("severity")).toHaveLength(4);
+    expect(screen.getAllByTestId("status")).toHaveLength(5);
+    expect(screen.getAllByTestId("severity")).toHaveLength(5);
     expect(screen.getAllByText("claims-api")).toHaveLength(2);
+    expect(screen.getAllByText("claims-status-api")).toHaveLength(1);
     expect(screen.getAllByText("scheduling-api")).toHaveLength(1);
     expect(screen.getAllByText("ehr-interface-gateway")).toHaveLength(1);
 
@@ -263,6 +277,7 @@ describe("inbox", () => {
       (el) => el.textContent ?? "",
     );
     expect(tickets).toEqual([
+      "TICKET-1051",
       "TICKET-1042",
       "TICKET-1038",
       "TICKET-1029",
