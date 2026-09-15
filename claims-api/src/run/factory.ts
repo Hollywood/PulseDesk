@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AutonomyLevel, OutputFormatType, run as runDroid } from "@factory/droid-sdk/node";
 import type { WorkspaceState } from "../gate/certify.js";
 import { resolveWorkspaceState } from "../gate/state.js";
 import { activeStrategyPath } from "../gate/run-tests.js";
@@ -23,10 +25,12 @@ export interface FactorySessionInvokerArgs {
   prompt: string;
   /** Working directory for the droid session, normally the repository root. */
   cwd: string;
-  /** Text appended to Droid's default system prompt. */
+  /** Text appended to the prompt as standing guardrails. */
   appendSystemPrompt: string;
-  /** JSON Schema the droid's final structured output must satisfy. */
+  /** JSON Schema the droid's final JSON should satisfy (used as guidance). */
   schema: unknown;
+  /** Hard cap for one droid session, in milliseconds. */
+  timeoutMs?: number;
   signal?: AbortSignal;
 }
 
@@ -66,51 +70,119 @@ export const SYSTEM_PROMPT_APPEND = [
   "Never push, merge, or deploy. The demo ends at a reviewable PR that a human approves.",
 ].join(" ");
 
+interface ExecResultEnvelope {
+  type?: string;
+  subtype?: string;
+  is_error?: boolean;
+  duration_ms?: number;
+  session_id?: string;
+  result?: string;
+  error?: { message?: string } | string;
+}
+
+function boundaryTrim(text: string, maxLength: number): string {
+  return text.length <= maxLength ? text : `${text.slice(0, maxLength)}…`;
+}
+
 /**
- * Invokes a real Factory droid session through the Droid TypeScript SDK. The
- * SDK starts the local `droid` CLI (and its stored login) as a subprocess, so
- * the session is a genuine Factory session; the agent works in the repository
- * and returns structured output that satisfies the requested JSON Schema.
+ * Evaluates the headless CLI's result envelope into a session outcome, or
+ * throws the matching bounded RunError. Extracted from the spawn logic so the
+ * mapping is unit-testable without launching a droid.
  */
-export async function invokeDroidViaSdk(args: FactorySessionInvokerArgs): Promise<FactorySessionOutcome> {
-  let result;
+export function evaluateExecEnvelope(envelope: ExecResultEnvelope): FactorySessionOutcome {
+  if (envelope.subtype !== "success" || envelope.is_error) {
+    const detail =
+      typeof envelope.error === "string"
+        ? boundaryTrim(envelope.error, 300)
+        : boundaryTrim(envelope.error?.message ?? "The droid session did not complete.", 300);
+    throw new RunError("factory_run_failed", detail);
+  }
+  if (typeof envelope.result !== "string") {
+    throw new RunError("factory_run_failed", "The Factory droid session returned no run output.");
+  }
+
+  let structuredOutput: unknown;
   try {
-    result = await runDroid(args.prompt, {
-      cwd: args.cwd,
-      systemPrompt: { type: "preset", preset: "droid", append: args.appendSystemPrompt },
-      outputFormat: { type: OutputFormatType.JsonSchema, schema: args.schema as Record<string, unknown> },
-      autonomyLevel: AutonomyLevel.High,
-      autoRejectPermissionRequests: true,
-      abortSignal: args.signal,
-    });
-  } catch (error) {
-    const timedOut =
-      error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
-    if (timedOut) {
-      throw new RunError(
-        "factory_timeout",
-        `The Factory droid session exceeded its time limit and was stopped. Try the run again.`,
-      );
-    }
+    structuredOutput = JSON.parse(envelope.result.trim());
+  } catch {
     throw new RunError(
-      "factory_unavailable",
-      "Could not reach Factory to start a droid session. Start the Factory app (or authenticate the droid CLI once), then retry.",
+      "factory_output_invalid",
+      "The Factory droid session did not return valid JSON evidence, so Ticketdroid recorded no result.",
     );
   }
 
-  if (!result.success) {
-    const message =
-      result.structuredOutputError?.message ??
-      result.error?.message ??
-      `The Factory droid session did not complete (${result.subtype}).`;
-    throw new RunError("factory_run_failed", message);
+  return {
+    structuredOutput,
+    durationMs: Math.max(0, envelope.duration_ms ?? 0),
+    sessionId: envelope.session_id ?? "unknown",
+  };
+}
+
+/**
+ * Invokes a real Factory droid session with the headless `droid exec` CLI
+ * (`--output-format json`). The CLI authenticates with the stored Factory
+ * login, so no API key is required, and the session is a genuine Factory
+ * session (its id is returned). The agent works in the repository and its
+ * final answer is parsed as the structured run output.
+ */
+export async function invokeDroidViaCli(args: FactorySessionInvokerArgs): Promise<FactorySessionOutcome> {
+  const dir = mkdtempSync(path.join(tmpdir(), "ticketdroid-run-"));
+  const promptFile = path.join(dir, "prompt.txt");
+  let stdout = "";
+  let failedOutput: { stdout?: string; stderr?: string } | null = null;
+  try {
+    writeFileSync(promptFile, `${args.prompt}\n\n${args.appendSystemPrompt}\n`, "utf8");
+    stdout = execFileSync(
+      "droid",
+      ["exec", "--cwd", args.cwd, "--auto", "high", "--output-format", "json", "--file", promptFile],
+      {
+        encoding: "utf8",
+        timeout: args.timeoutMs,
+        maxBuffer: 20 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+  } catch (error) {
+    const cause = error as { code?: string; signal?: string; stdout?: string; stderr?: string; status?: number };
+    if (cause?.code === "ETIMEDOUT" || cause?.signal === "SIGTERM" || cause?.signal === "SIGKILL") {
+      throw new RunError(
+        "factory_timeout",
+        "The Factory droid session exceeded its time limit and was stopped. Try the run again.",
+      );
+    }
+    if (cause?.code === "ENOENT") {
+      throw new RunError(
+        "factory_unavailable",
+        "Could not start a Factory droid session because the `droid` CLI is not installed or not on PATH.",
+      );
+    }
+    // The CLI exits non-zero on failed sessions but still prints the JSON envelope.
+    failedOutput = { stdout: cause.stdout, stderr: cause.stderr };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 
-  return {
-    structuredOutput: result.structuredOutput ?? null,
-    durationMs: Math.max(0, result.durationMs),
-    sessionId: result.sessionId,
+  const parseEnvelope = (raw: string): ExecResultEnvelope | null => {
+    try {
+      const parsed = JSON.parse(raw.trim()) as ExecResultEnvelope;
+      return parsed.type === "result" ? parsed : null;
+    } catch {
+      return null;
+    }
   };
+
+  const envelope =
+    parseEnvelope(stdout) ??
+    (failedOutput !== null ? parseEnvelope(failedOutput.stdout ?? "") ?? parseEnvelope(failedOutput.stderr ?? "") : null);
+
+  if (envelope === null) {
+    throw new RunError(
+      "factory_unavailable",
+      "Could not start a Factory droid session. Start the Factory app (or authenticate the droid CLI once), then retry.",
+    );
+  }
+
+  return evaluateExecEnvelope(envelope);
 }
 
 /** The exact four-step Ticketdroid timeline, in execution order. */
@@ -327,6 +399,53 @@ export function normalizeFactoryOutput(value: unknown): FactoryOutput {
   };
 }
 
+/**
+ * Human-readable template of the exact JSON the droid must return. Mirrors the
+ * strict schema in FACTORY_OUTPUT_SCHEMA; embedded in the prompt because the
+ * headless CLI path has no server-side structured-output enforcement.
+ */
+const OUTPUT_SHAPE_SPEC = {
+  steps: [
+    { id: "intake", title: "Intake", detail: "What the run read from the fixture and why." },
+    { id: "code_search", title: "Code search", detail: "Files inspected and what was found in the service code." },
+    { id: "hypothesis", title: "Hypothesis", detail: "Baseline test result and the root-cause hypothesis." },
+    { id: "patch", title: "Patch", detail: "The change applied and the post-patch test result." },
+  ],
+  rca: {
+    signal: "String — the alert signal.",
+    customerImpact: "String — revenue-cycle impact of the failure.",
+    hypothesis: "String — root-cause hypothesis supported by the evidence.",
+    filesToInspect: ["String — repo-relative files inspected or changed"],
+    blastRadius: "String — scope of the blast radius.",
+    testsThatMustPass: ["String — tests that must pass before merge"],
+    humanVerification: ["String — what a human must verify before merge"],
+  },
+  testsBefore: {
+    total: 0,
+    passed: 0,
+    failed: 0,
+    regression: { name: "String — the regression assertion name", expected: 0, actual: 0 },
+    regressionPassed: false,
+    certification: "expected_red",
+  },
+  testsAfter: {
+    total: 0,
+    passed: 0,
+    failed: 0,
+    regression: { name: "String", expected: 0, actual: null },
+    regressionPassed: true,
+    certification: "patched_green",
+  },
+  pr: {
+    title: "String — PR title including the ticket id",
+    why: "String — why this change fixes the ticket",
+    whatChanged: ["String — bullet list of changes"],
+    tests: ["String — tests added or updated"],
+    riskAndRollback: "String — risk and rollback plan",
+    humanVerification: ["String — human verification checklist"],
+  },
+} as const;
+
 /** Builds the self-contained prompt the Ticketdroid droid session is asked to follow. */
 export function buildFactoryPrompt(ticket: Record<string, unknown>): string {
   const fields = [
@@ -358,7 +477,10 @@ export function buildFactoryPrompt(ticket: Record<string, unknown>): string {
     "2. Find the service named in the ticket. If it does not exist in this repository yet, create it as a new workspace directory named after the service (e.g. scheduling-api/) with a small, zero-dependency TypeScript implementation of the affected behavior, then implement the fix in it.",
     "3. Reproduce the problem with a regression test: run the suite before the fix (expected red) and after (expected green). Prefer the repository's existing vitest setup; you may add a minimal package.json for a new service.",
     "4. Do the work for real in the current working tree and commit your changes to the current branch when done; the demo shows the resulting diff.",
-    "5. Finish by answering with structured JSON matching the requested schema. Every field must report real evidence from this run — no placeholder copy.",
+    "5. Finish by answering with ONLY a single JSON object matching the OUTPUT FORMAT below. Do not wrap it in markdown or add prose. Every field must report real evidence from this run — no placeholder copy.",
+    "",
+    "OUTPUT FORMAT (exact keys; the demo renders exactly this):",
+    JSON.stringify(OUTPUT_SHAPE_SPEC, null, 2),
     "",
     "GUARDRAILS:",
     "- Synthetic data only. Never use real patient names, MRNs, diagnoses, DOBs, claim numbers, secrets, or production URLs.",
@@ -487,16 +609,16 @@ export async function runTicketViaFactory(
 
   const startedAt = now();
   const baseRef = baseRefForRun(root);
-  const signal = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   let outcome: FactorySessionOutcome;
   try {
-    outcome = await (options.invoke ?? invokeDroidViaSdk)({
+    outcome = await (options.invoke ?? invokeDroidViaCli)({
       prompt: buildFactoryPrompt(ticket),
       cwd: root,
       appendSystemPrompt: SYSTEM_PROMPT_APPEND,
       schema: FACTORY_OUTPUT_SCHEMA,
-      signal,
+      timeoutMs,
     });
   } catch (error) {
     if (error instanceof RunError) {

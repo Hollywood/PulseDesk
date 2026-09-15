@@ -7,6 +7,7 @@ import { RunError } from "./types.js";
 import {
   buildFactoryPrompt,
   computeWorkingTreeDiff,
+  evaluateExecEnvelope,
   normalizeFactoryOutput,
   runTicketViaFactory,
   type FactoryOutput,
@@ -160,6 +161,40 @@ describe("buildFactoryPrompt", () => {
     expect(prompt).toContain("Intermittent double-booking");
     expect(prompt).toContain("Never push, merge, or deploy.");
     expect(prompt).toContain("Do not modify web/");
+  });
+});
+
+describe("evaluateExecEnvelope", () => {
+  it("maps a successful CLI envelope to a session outcome", () => {
+    const outcome = evaluateExecEnvelope({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      duration_ms: 5314,
+      session_id: "965c4e87",
+      result: '{"a":1}',
+    });
+    expect(outcome.structuredOutput).toEqual({ a: 1 });
+    expect(outcome.durationMs).toBe(5314);
+    expect(outcome.sessionId).toBe("965c4e87");
+  });
+
+  it("surfaces a failed session as a bounded factory_run_failed error", () => {
+    expect(() =>
+      evaluateExecEnvelope({ type: "result", subtype: "error_during_execution", is_error: true, error: "agent failed" }),
+    ).toThrowError(RunError);
+  });
+
+  it("rejects a session result that is not valid JSON", () => {
+    expect(() =>
+      evaluateExecEnvelope({ type: "result", subtype: "success", is_error: false, result: "not json" }),
+    ).toThrowError(expect.objectContaining({ code: "factory_output_invalid" }));
+  });
+
+  it("rejects a session with no result text", () => {
+    expect(() =>
+      evaluateExecEnvelope({ type: "result", subtype: "success", is_error: false }),
+    ).toThrowError(expect.objectContaining({ code: "factory_run_failed" }));
   });
 });
 
