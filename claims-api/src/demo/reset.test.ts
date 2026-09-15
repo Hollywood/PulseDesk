@@ -12,6 +12,7 @@ function runGit(dir: string, args: string[]): string {
   return execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 }
 
+/** Repo with a tracked file, a .gitignore, and one pre-existing ignored file. */
 function makeRepo(): string {
   const dir = mkdtempSync(path.join(tmpdir(), "ticketdroid-reset-"));
   tempDirs.push(dir);
@@ -19,6 +20,8 @@ function makeRepo(): string {
   runGit(dir, ["config", "user.email", "test@example.invalid"]);
   runGit(dir, ["config", "user.name", "Ticketdroid Test"]);
   writeFileSync(path.join(dir, "tracked.ts"), "let v = 1;\n", "utf8");
+  writeFileSync(path.join(dir, ".gitignore"), "pre.txt\nignored-out.txt\n", "utf8");
+  writeFileSync(path.join(dir, "pre.txt"), "pre-existing ignored\n", "utf8");
   runGit(dir, ["add", "."]);
   runGit(dir, ["commit", "-m", "base"]);
   return dir;
@@ -35,14 +38,16 @@ afterEach(() => {
 });
 
 describe("resetDemo", () => {
-  it("returns to main, deletes the demo branch, and removes files the run created", () => {
+  it("returns to main, deletes the demo branch, and removes tracked/untracked/ignored run files", () => {
     const repo = makeRepo();
     createLocalDemoBranch("TICKET-1038", repo);
     expect(branch(repo)).toBe(demoBranchName("TICKET-1038"));
 
-    // A droid-created untracked file and an uncommitted tracked edit.
+    // The droid's work: an untracked service file, an ignored build output,
+    // and an uncommitted tracked edit.
     mkdirSync(path.join(repo, "scheduling-api"), { recursive: true });
     writeFileSync(path.join(repo, "scheduling-api", "main.ts"), "export {};\n", "utf8");
+    writeFileSync(path.join(repo, "ignored-out.txt"), "build output\n", "utf8");
     writeFileSync(path.join(repo, "tracked.ts"), "let v = 2;\n", "utf8");
 
     const clearArtifacts = vi.fn();
@@ -50,7 +55,7 @@ describe("resetDemo", () => {
     const result = resetDemo({
       root: repo,
       verifyBuggy: verify,
-      readSnapshots: () => [],
+      readSnapshots: () => [{ files: [], ignored: ["pre.txt"] }],
       clearArtifacts,
     });
 
@@ -58,12 +63,15 @@ describe("resetDemo", () => {
     expect(result.ticketId).toBe("TICKET-1042");
     expect(branch(repo)).toBe("main");
     expect(existsSync(path.join(repo, "scheduling-api", "main.ts"))).toBe(false);
+    expect(existsSync(path.join(repo, "ignored-out.txt"))).toBe(false);
     expect(readFileSync(path.join(repo, "tracked.ts"), "utf8")).toBe("let v = 1;\n");
+    // Pre-existing ignored user file survives.
+    expect(existsSync(path.join(repo, "pre.txt"))).toBe(true);
     expect(verify).toHaveBeenCalledOnce();
     expect(clearArtifacts).toHaveBeenCalledOnce();
   });
 
-  it("only removes untracked files that were not present before the run", () => {
+  it("only removes files that were not present before the run", () => {
     const repo = makeRepo();
     createLocalDemoBranch("TICKET-1029", repo);
 
@@ -74,7 +82,7 @@ describe("resetDemo", () => {
     resetDemo({
       root: repo,
       verifyBuggy: () => true,
-      readSnapshots: () => ["keep.txt"],
+      readSnapshots: () => [{ files: ["keep.txt"], ignored: ["pre.txt"] }],
       clearArtifacts: vi.fn(),
     });
 
@@ -82,17 +90,27 @@ describe("resetDemo", () => {
     expect(existsSync(path.join(repo, "droid-created.txt"))).toBe(false);
   });
 
-  it("refuses to start a run on a tree with pre-existing untracked files", () => {
-    const repo = makeRepo();
-    writeFileSync(path.join(repo, "user-scratch.txt"), "user file\n", "utf8");
-    expect(() => createLocalDemoBranch("TICKET-1042", repo)).toThrowError(
-      expect.objectContaining({ code: "workspace_blocked" }),
-    );
-  });
-
-  it("is safe to run when no demo branch exists", () => {
+  it("is safe to run when no demo branch exists and no manifest was recorded", () => {
     const repo = makeRepo();
     resetDemo({ root: repo, verifyBuggy: () => true, readSnapshots: () => [], clearArtifacts: vi.fn() });
+    expect(branch(repo)).toBe("main");
+    expect(existsSync(path.join(repo, "pre.txt"))).toBe(true);
+  });
+
+  it("skips file cleanup when a legacy manifest cannot prove pre-existing files", () => {
+    const repo = makeRepo();
+    createLocalDemoBranch("TICKET-1042", repo);
+    writeFileSync(path.join(repo, "run-file.txt"), "run file\n", "utf8");
+
+    resetDemo({
+      root: repo,
+      verifyBuggy: () => true,
+      readSnapshots: () => [{ files: [], ignored: [], legacy: true }],
+      clearArtifacts: vi.fn(),
+    });
+
+    // Conservative: no difference-based deletion when the manifest is unreliable.
+    expect(existsSync(path.join(repo, "run-file.txt"))).toBe(true);
     expect(branch(repo)).toBe("main");
   });
 
@@ -110,5 +128,13 @@ describe("resetDemo", () => {
     expect(() =>
       resetDemo({ root: repo, verifyBuggy: () => false, readSnapshots: () => [], clearArtifacts: vi.fn() }),
     ).toThrowError(ResetError);
+  });
+
+  it("refuses to start a run on a tree with pre-existing untracked files", () => {
+    const repo = makeRepo();
+    writeFileSync(path.join(repo, "user-scratch.txt"), "user file\n", "utf8");
+    expect(() => createLocalDemoBranch("TICKET-1042", repo)).toThrowError(
+      expect.objectContaining({ code: "workspace_blocked" }),
+    );
   });
 });

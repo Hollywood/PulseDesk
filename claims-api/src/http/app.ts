@@ -11,10 +11,8 @@ import { createLocalDemoBranch, LocalBranchError, resetLocalDemoBranch } from ".
 import { resetDemo, ResetError, type DemoResetResult } from "../demo/reset.js";
 import { buildDemoStatus } from "../demo/status.js";
 import { createHttpLogger, createLogger, type Logger } from "../logger.js";
-import { runTicketViaFactory } from "../run/factory.js";
-import { readRunArtifact, writeRunArtifact } from "../run/store.js";
-import { writeUntrackedSnapshot } from "../run/store.js";
-import { listUntrackedFiles } from "../run/factory.js";
+import { runTicketViaFactory, listIgnoredFiles, listUntrackedFiles } from "../run/factory.js";
+import { readRunArtifact, writeRunArtifact, writeUntrackedSnapshot } from "../run/store.js";
 import { RunError, type TicketRunResult } from "../run/types.js";
 import { loadTickets, type Ticket } from "./tickets.js";
 
@@ -44,7 +42,10 @@ export function defaultDeps(): AppDeps {
         );
       }
       const branchName = createLocalDemoBranch(ticketId);
-      writeUntrackedSnapshot(ticketId, listUntrackedFiles(process.cwd()));
+      writeUntrackedSnapshot(ticketId, {
+        files: listUntrackedFiles(process.cwd()),
+        ignored: listIgnoredFiles(process.cwd()),
+      });
       try {
         const result = await runTicketViaFactory(ticketId, { branchName });
         writeRunArtifact(ticketId, result);

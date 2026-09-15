@@ -509,12 +509,25 @@ export function baseRefForRun(root: string): string {
 
 /** Non-ignored untracked files in the working tree, NUL-safe. */
 export function listUntrackedFiles(root: string): string[] {
-  const output = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "-z"], {
-    cwd: root,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  return output.split("\0").filter(Boolean);
+  return listOtherFiles(root, ["--others", "--exclude-standard", "-z"]);
+}
+
+/** Gitignored files in the working tree (e.g. node_modules), NUL-safe. */
+export function listIgnoredFiles(root: string): string[] {
+  return listOtherFiles(root, ["--others", "--ignored", "--exclude-standard", "-z"]);
+}
+
+function listOtherFiles(root: string, args: string[]): string[] {
+  try {
+    const output = execFileSync("git", ["ls-files", ...args], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return output.split("\0").filter(Boolean);
+  } catch {
+    throw new RunError("diff_failed", "Could not read the workspace files from git.");
+  }
 }
 
 /**

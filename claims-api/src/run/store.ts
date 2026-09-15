@@ -30,22 +30,37 @@ export function writeBaselineSnapshot(ticketId: string, baseline: string): void 
   writeFileSync(baselineSnapshotPath(ticketId), baseline, "utf8");
 }
 
+export interface UntrackedManifest {
+  /** Non-ignored untracked files present when the manifest was captured. */
+  files: string[];
+  /** Gitignored files present when the manifest was captured. */
+  ignored: string[];
+}
+
 /**
- * Records which non-ignored untracked files existed before a run started, so
- * demo reset can later remove exactly the files a droid run created without
- * touching pre-existing user files.
+ * Records which untracked and ignored files existed before a run started, so
+ * demo reset can later remove exactly what a droid run created (tracked files
+ * disappear with the branch; untracked and ignored ones are deleted by
+ * difference) without touching pre-existing user files.
  */
-export function writeUntrackedSnapshot(ticketId: string, files: string[]): void {
+export function writeUntrackedSnapshot(ticketId: string, manifest: UntrackedManifest): void {
   mkdirSync(runsDirectory(), { recursive: true });
-  writeFileSync(untrackedSnapshotPath(ticketId), `${JSON.stringify({ files }, null, 2)}\n`, "utf8");
+  writeFileSync(
+    untrackedSnapshotPath(ticketId),
+    `${JSON.stringify({ files: manifest.files ?? [], ignored: manifest.ignored ?? [] }, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 export interface UntrackedSnapshot {
   ticketId: string;
   files: string[];
+  ignored: string[];
+  /** True when the manifest was written before the ignored-list capture existed. */
+  legacy: boolean;
 }
 
-/** Reads every recorded pre-run untracked manifest. Malformed files yield an empty manifest. */
+/** Reads every recorded pre-run file manifest. Malformed files yield an empty manifest. */
 export function readUntrackedSnapshots(): UntrackedSnapshot[] {
   const dir = runsDirectory();
   if (!existsSync(dir)) {
@@ -56,11 +71,20 @@ export function readUntrackedSnapshots(): UntrackedSnapshot[] {
     .map((entry) => {
       const ticketId = entry.replace(/\.untracked-before\.json$/, "");
       try {
-        const parsed = JSON.parse(readFileSync(path.join(dir, entry), "utf8")) as { files?: unknown };
-        const files = Array.isArray(parsed.files) ? parsed.files.filter((x): x is string => typeof x === "string") : [];
-        return { ticketId, files };
+        const parsed = JSON.parse(readFileSync(path.join(dir, entry), "utf8")) as {
+          files?: unknown;
+          ignored?: unknown;
+        };
+        const stringList = (value: unknown): string[] =>
+          Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : [];
+        return {
+          ticketId,
+          files: stringList(parsed.files),
+          ignored: stringList(parsed.ignored),
+          legacy: !("ignored" in parsed),
+        };
       } catch {
-        return { ticketId, files: [] };
+        return { ticketId, files: [], ignored: [], legacy: true };
       }
     });
 }

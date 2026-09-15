@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 import path from "node:path";
 import { activeStrategyPath } from "../gate/run-tests.js";
 import { resolveWorkspaceState } from "../gate/state.js";
-import { listUntrackedFiles } from "../run/factory.js";
+import { listIgnoredFiles, listUntrackedFiles } from "../run/factory.js";
 import { clearRunArtifacts, readUntrackedSnapshots } from "../run/store.js";
 import { LocalBranchError, REPOSITORY_ROOT, resetLocalDemoBranch } from "./branch.js";
 
@@ -27,8 +27,8 @@ export interface ResetDemoOptions {
   root?: string;
   /** Verifies the workspace is back to the planted state. Defaults to the real gate check. */
   verifyBuggy?: () => boolean;
-  /** Reads untracked files that existed before any run (injectable for tests). */
-  readSnapshots?: () => string[];
+  /** Reads file lists that existed before any run (injectable for tests). */
+  readSnapshots?: () => Array<{ files: string[]; ignored: string[]; legacy?: boolean }>;
   /** Removes recorded run artifacts (injectable for tests). */
   clearArtifacts?: () => void;
 }
@@ -44,18 +44,22 @@ function resetBranch(root: string): void {
   }
 }
 
-function removeNewUntrackedFiles(root: string, before: Set<string>): void {
-  const after = listUntrackedFiles(root);
-  const created = after.filter((file) => !before.has(file));
-  for (const file of created) {
+function removeNewOtherFiles(root: string, before: Set<string>): void {
+  const after = [...listUntrackedFiles(root), ...listIgnoredFiles(root)];
+  const removed: string[] = [];
+  for (const file of after) {
+    if (before.has(file)) {
+      continue;
+    }
     const resolved = path.resolve(root, file);
     if (!resolved.startsWith(`${path.resolve(root)}${path.sep}`)) {
       throw new ResetError("reset_blocked", "Demo reset is blocked by an untrusted cleanup path.");
     }
     rmSync(resolved, { force: true });
+    removed.push(file);
   }
   // Prune directories the run left behind (empty only; never recursive).
-  const dirs = [...new Set(created.map((file) => path.dirname(file)))].sort(
+  const dirs = [...new Set(removed.map((file) => path.dirname(file)))].sort(
     (a, b) => b.split("/").length - a.split("/").length,
   );
   for (const dir of dirs) {
@@ -77,15 +81,22 @@ function removeNewUntrackedFiles(root: string, before: Set<string>): void {
 export function resetDemo(options: ResetDemoOptions = {}): DemoResetResult {
   const root = options.root ?? REPOSITORY_ROOT;
   const verifyBuggy = options.verifyBuggy ?? (() => resolveWorkspaceState(activeStrategyPath()) === "buggy");
-  const readSnapshots = options.readSnapshots ?? (() => readUntrackedSnapshots().flatMap((snapshot) => snapshot.files));
+  const readSnapshots =
+    options.readSnapshots ?? (() => readUntrackedSnapshots().map(({ files, ignored, legacy }) => ({ files, ignored, legacy })));
   const clearArtifacts = options.clearArtifacts ?? clearRunArtifacts;
 
-  const before = new Set(readSnapshots());
+  const snapshots = readSnapshots();
+  // File cleanup is only safe when every manifest comes from a real run with
+  // the full untracked+ignored capture. Legacy or malformed manifests cannot
+  // prove which files pre-existed, so deleting by difference is unsafe (it
+  // could remove pre-existing ignored files such as node_modules).
+  const resolvable = snapshots.length > 0 && snapshots.every((snapshot) => !snapshot.legacy);
+  const before = new Set(snapshots.flatMap((snapshot) => [...snapshot.files, ...snapshot.ignored]));
 
   resetBranch(root);
 
-  if (before.size > 0 || listUntrackedFiles(root).length > 0) {
-    removeNewUntrackedFiles(root, before);
+  if (resolvable) {
+    removeNewOtherFiles(root, before);
   }
 
   clearArtifacts();

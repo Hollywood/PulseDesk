@@ -20,10 +20,12 @@ never touches `main`, so reset is purely git plumbing:
 - `git switch --force main` (discards any uncommitted run edits on the demo
   branch; safe because a run may only start from a clean tree)
 - Delete every `ticketdroid/*` demo branch
-- Remove untracked files the run created (a pre-run manifest under
-  `claims-api/artifacts/runs/*.untracked-before.json` scopes the cleanup so
-  pre-existing user files are never touched; a run cannot start on a tree
-  with pre-existing untracked edits anyway)
+- Remove run-created files by difference against the pre-run manifest under
+  `claims-api/artifacts/runs/*.untracked-before.json`, covering untracked AND
+  gitignored files (e.g. a fresh service's `node_modules`). Cleanup only runs
+  when a full, non-legacy manifest exists, so pre-existing user files and
+  ignored tooling directories (root `node_modules`, `dist`, `artifacts`) are
+  never touched.
 - Clear `claims-api/artifacts/runs/` (run artifacts and manifests)
 - Verify `claims-api/src/domain/active-strategy.ts` is back to the planted
   buggy binding; refuse with `reset_verification_failed` otherwise
