@@ -11,15 +11,17 @@ import { createLocalDemoBranch, LocalBranchError, resetLocalDemoBranch } from ".
 import { resetDemo, ResetError, type DemoResetResult } from "../demo/reset.js";
 import { buildDemoStatus } from "../demo/status.js";
 import { createHttpLogger, createLogger, type Logger } from "../logger.js";
-import { createDefaultOrchestrateDeps, runTicket } from "../run/orchestrate.js";
-import { readRunArtifact, writeBaselineSnapshot, writeRunArtifact } from "../run/store.js";
+import { runTicketViaFactory } from "../run/factory.js";
+import { readRunArtifact, writeRunArtifact } from "../run/store.js";
+import { writeUntrackedSnapshot } from "../run/store.js";
+import { listUntrackedFiles } from "../run/factory.js";
 import { RunError, type TicketRunResult } from "../run/types.js";
 import { loadTickets, type Ticket } from "./tickets.js";
 
 export interface AppDeps {
   getTickets: () => readonly Ticket[];
   getWorkspaceState: () => WorkspaceState;
-  /** Executes a full Ticketdroid run for a wired ticket and persists artifacts. */
+  /** Executes a full Ticketdroid run for a ticket and persists artifacts. */
   startRun: (ticketId: string) => Promise<TicketRunResult>;
   /** Reads the recorded run for a ticket, or null when none exists yet. */
   getRun: (ticketId: string) => TicketRunResult | null;
@@ -32,13 +34,19 @@ export function defaultDeps(): AppDeps {
     getTickets: loadTickets,
     getWorkspaceState: () => resolveWorkspaceState(activeStrategyPath()),
     startRun: async (ticketId) => {
-      const branchName = createLocalDemoBranch();
+      const workspace = resolveWorkspaceState(activeStrategyPath());
+      if (workspace !== "buggy") {
+        throw new RunError(
+          workspace === "patched" ? "already_patched" : "workspace_blocked",
+          workspace === "patched"
+            ? "Workspace is already patched; run the demo reset before a new run."
+            : "Workspace has unexpected local edits and cannot run until restored.",
+        );
+      }
+      const branchName = createLocalDemoBranch(ticketId);
+      writeUntrackedSnapshot(ticketId, listUntrackedFiles(process.cwd()));
       try {
-        const deps = createDefaultOrchestrateDeps({
-          branchName,
-          onPatchApplied: (baseline) => writeBaselineSnapshot(ticketId, baseline),
-        });
-        const result = await runTicket(ticketId, deps);
+        const result = await runTicketViaFactory(ticketId, { branchName });
         writeRunArtifact(ticketId, result);
         return result;
       } catch (error) {

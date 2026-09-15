@@ -28,7 +28,7 @@ const fixture = [
     title: "Intermittent double-booking on appointment reschedule",
     summary: "Two appointment slots created for the same patient/provider pair.",
     alert_body: "Error: SlotConflictWarning (non-fatal)",
-    wired: false,
+    wired: true,
     notes_for_demo: "",
   },
   {
@@ -41,7 +41,7 @@ const fixture = [
     title: "HL7 ADT feed lag exceeding 15 min threshold",
     summary: "Outbound ADT messages queuing with rising lag; no failures yet.",
     alert_body: "Monitor: hl7-adt-queue-lag",
-    wired: false,
+    wired: true,
     notes_for_demo: "",
   },
   {
@@ -54,7 +54,7 @@ const fixture = [
     title: "Nightly claims batch export job ran 40 min longer than baseline",
     summary: "Batch export completed but exceeded the SLA window; no data loss.",
     alert_body: "Job: nightly-claims-export",
-    wired: false,
+    wired: true,
     notes_for_demo: "",
   },
 ] as const satisfies readonly Ticket[];
@@ -269,26 +269,15 @@ describe("detail view", () => {
     expect(screen.getByText(/claims-submission-duplicate-check/)).toBeInTheDocument();
   });
 
-  it("shows a Run Ticketdroid button only for the wired ticket", async () => {
-    await renderApp();
-    await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
-
-    await waitFor(() => {
-      expect(window.location.hash).toBe("#/tickets/TICKET-1042");
-    });
-    expect(screen.getByRole("button", { name: "Run Ticketdroid" })).toBeInTheDocument();
-  });
-
-  it("marks the three unwired tickets as read-only with no run button", async () => {
-    const unwired = fixture.filter((t) => !t.wired);
-    for (const ticket of unwired) {
+  it("shows a Run Ticketdroid button for every ticket", async () => {
+    for (const ticket of fixture) {
       window.location.hash = `#/tickets/${ticket.id}`;
       const view = render(<App />);
       await waitFor(() => {
         expect(screen.getAllByText(ticket.id).length).toBeGreaterThan(0);
       });
-      expect(screen.queryByRole("button", { name: "Run Ticketdroid" })).not.toBeInTheDocument();
-      expect(screen.getByText("Read-only signal — no automated run for this ticket.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Run Ticketdroid" })).toBeInTheDocument();
+      expect(screen.queryByText("Read-only signal — no automated run for this ticket.")).not.toBeInTheDocument();
       view.unmount();
     }
   });

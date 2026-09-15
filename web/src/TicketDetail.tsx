@@ -18,9 +18,6 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
   const [run, setRun] = useState<RunState>({ status: "idle" });
 
   useEffect(() => {
-    if (!ticket.wired) {
-      return;
-    }
     let cancelled = false;
     setRun({ status: "loading" });
     void (async () => {
@@ -51,7 +48,7 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
     return () => {
       cancelled = true;
     };
-  }, [ticket.id, ticket.wired]);
+  }, [ticket.id]);
 
   async function handleRun(): Promise<void> {
     setRun({ status: "running" });
@@ -108,9 +105,7 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
       </section>
 
       <section className="run">
-        {!ticket.wired ? (
-          <p className="run__na">Read-only signal — no automated run for this ticket.</p>
-        ) : run.status === "ready" ? (
+        {run.status === "ready" ? (
           <>
             <RunResultView run={run.run} />
             <div className="run__actions">
@@ -118,7 +113,7 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
                 Reset demo
               </button>
               <p className="run__result">
-                Workspace is now patched on local branch {run.run.branchName ?? "ticketdroid/TICKET-1042"} — reset restores the planted bug, removes the branch, and checks out main.
+                Workspace is now patched on local branch {run.run.branchName ?? `ticketdroid/${ticket.id}`} — reset restores the planted state, removes the branch, and checks out main.
               </p>
             </div>
           </>
@@ -129,7 +124,9 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
             <button type="button" className="run__button" disabled>
               Running Ticketdroid…
             </button>
-            <p className="run__result">Executing intake → code search → hypothesis → patch. This takes a few seconds.</p>
+            <p className="run__result">
+              A Factory droid is processing the ticket — intake → code search → hypothesis → patch. This takes a few minutes.
+            </p>
           </>
         ) : run.status === "resetting" ? (
           <>
@@ -161,7 +158,7 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
               Run Ticketdroid
             </button>
             <p className="run__result">
-              Runs RCA, applies the real fix, and shows the genuine diff for the planted TICKET-1042 bug.
+              Calls back to Factory: a droid investigates {ticket.id}, implements a fix in the repo, and returns a reviewable PR.
             </p>
           </>
         )}

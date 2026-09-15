@@ -10,6 +10,24 @@ Demo path: TICKET-1042 (duplicate insurance claim submission on retry).
 This is a revenue-cycle/billing bug, not a clinical or patient-safety one —
 keep it that way; do not introduce clinical data or patient-care scenarios.
 
+## Run path
+Every fixture ticket has a working "Run Ticketdroid" button. Clicking it calls
+back to Factory: claims-api starts a real droid session through the Droid
+TypeScript SDK (`@factory/droid-sdk`), pointing at the repo root. The droid
+processes the ticket, implements a fix (creating a missing service directory
+when the ticket's service is not in the repo yet), and returns structured
+evidence that claims-api records and the web PR view renders.
+- No simulated fallback: if Factory is not reachable, the run surfaces a
+  bounded error. Do not route runs through the deterministic local
+  orchestration (`runTicket`) — it remains only as the planted-bug gate/CI
+  validation, not the app's run path.
+- Runs happen on a per-ticket local branch (`ticketdroid/<TICKET-ID>`); the
+  droid commits its work there and claims-api computes the genuine git diff.
+- Demo reset is git-based: it returns to `main`, deletes all
+  `ticketdroid/*` branches, removes untracked files the run created, and
+  clears `claims-api/artifacts/runs/`. It never deletes pre-existing user
+  work (a dirty or untracked-dirty tree blocks a new run).
+
 ## Commands
 - Install: `pnpm install` in `/web` and `/claims-api` (or repo-root workspace)
 - Run API: `pnpm dev` in `/claims-api`
@@ -26,7 +44,9 @@ keep it that way; do not introduce clinical data or patient-care scenarios.
 
 ## Conventions
 - TypeScript where possible. Small modules. No auth. No cloud deploy.
-- One fully wired ticket: TICKET-1042. Other tickets may be fixtures only.
+- Every fixture ticket is wired: Run Ticketdroid calls back to Factory for a
+  real droid run. TICKET-1042 carries the planted claims-api bug; the other
+  tickets' services are created on demand by the droid during their runs.
 - The planted bug must be real: tests fail before the patch and pass after.
 - "Deploy" in this project means "open a reviewable PR," never "merge" or
   "push to a running environment." Do not implement auto-merge or auto-deploy.
@@ -42,9 +62,11 @@ Do not expand scope beyond what was approved in the Mission plan.
 
 ## Verification
 Before completing a milestone:
-1. `pnpm test` in `claims-api`
-2. Click TICKET-1042 → Run → PR view shows a real diff
-3. Demo reset returns the repo to the pre-patch state
+1. `pnpm test` in `claims-api` — the planted regression is red on a buggy
+   workspace by design (expected_red); the rest of the suite passes.
+2. Click any ticket → Run → a Factory droid session starts; when it completes
+   the PR view shows a real diff.
+3. Demo reset returns the repo to the pre-run state on `main`.
 
 ## Safety
 - Do not add real secrets, PagerDuty tokens, or production URLs.

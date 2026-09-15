@@ -6,17 +6,33 @@ description: Reset Ticketdroid to the interview start state. Use when preparing 
 # Demo Reset
 
 ## Instructions
-1. Restore `claims-api` to the planted-bug commit or stash the patch.
-2. Confirm `pnpm test` in `claims-api` fails on the duplicate-claim case.
+1. Run the demo reset (web "Reset demo" button, `POST /api/demo/reset`, or the
+   claims-api `resetDemo` function).
+2. Confirm `pnpm test` in `claims-api` fails on the duplicate-claim case
+   (expected_red baseline) and nothing else.
 3. Restore fixtures if modified.
-4. Print the exact click path: open web → TICKET-1042 → Run.
+4. Print the exact click path: open web → pick any ticket → Run Ticketdroid.
 
-## Concrete steps (pre-git baseline)
-Until the repo has commits, each Ticketdroid run persists everything reset
-needs under `claims-api/artifacts/runs/`:
-- Restore the planted bug:
-  `cp claims-api/artifacts/runs/TICKET-1042.active-strategy.baseline.ts claims-api/src/domain/active-strategy.ts`
-- Remove the recorded run so the app returns to the pre-run state:
-  `rm claims-api/artifacts/runs/TICKET-1042.json claims-api/artifacts/runs/TICKET-1042.active-strategy.baseline.ts`
-- Confirm `pnpm test` in `claims-api` fails on exactly the duplicate-claim case.
-- Click path: open web (`pnpm dev` in `claims-api` and `web`) → TICKET-1042 → Run Ticketdroid.
+## How reset works (git-based)
+Since the repo has commits, every run happens on a disposable local branch and
+never touches `main`, so reset is purely git plumbing:
+
+- `git switch --force main` (discards any uncommitted run edits on the demo
+  branch; safe because a run may only start from a clean tree)
+- Delete every `ticketdroid/*` demo branch
+- Remove untracked files the run created (a pre-run manifest under
+  `claims-api/artifacts/runs/*.untracked-before.json` scopes the cleanup so
+  pre-existing user files are never touched; a run cannot start on a tree
+  with pre-existing untracked edits anyway)
+- Clear `claims-api/artifacts/runs/` (run artifacts and manifests)
+- Verify `claims-api/src/domain/active-strategy.ts` is back to the planted
+  buggy binding; refuse with `reset_verification_failed` otherwise
+
+Run artifacts live under `claims-api/artifacts/runs/` (gitignored). The
+deterministic orchestrator's baseline snapshots are still cleaned there.
+
+## Confirm the red baseline
+- `pnpm test` in `claims-api` fails on exactly the duplicate-claim case
+  (`logical_submission_count expected 1, actual 2`).
+- Click path: open web (`pnpm dev` in `claims-api` and `web`) → any ticket →
+  Run Ticketdroid → wait for the Factory droid session → PR view.

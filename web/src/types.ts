@@ -13,7 +13,7 @@ export interface Ticket {
   title: string;
   summary: string;
   alert_body: string;
-  /** Whether Ticketdroid is wired to run RCA + patch + PR for this ticket. */
+  /** Whether Ticketdroid will run RCA + patch + PR for this ticket. All fixtures are wired; runs call back to Factory. */
   wired: boolean;
   notes_for_demo: string;
 }

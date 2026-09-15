@@ -451,12 +451,6 @@ code {
   background: var(--surface);
 }
 
-.run__na {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
 /* ---------- Run view / PR view ---------- */
 
 .run-view {

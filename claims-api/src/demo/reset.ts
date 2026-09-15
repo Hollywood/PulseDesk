@@ -1,17 +1,14 @@
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync } from "node:fs";
+import path from "node:path";
 import { activeStrategyPath } from "../gate/run-tests.js";
 import { resolveWorkspaceState } from "../gate/state.js";
-import { resetLocalDemoBranch, LocalBranchError } from "./branch.js";
-import { baselineSnapshotPath, runArtifactPath } from "../run/store.js";
-
-const DEMO_TICKET_ID = "TICKET-1042";
-const BUGGY_BINDING = /ACTIVE_STRATEGY\s*(?::[^=]+)?=\s*perAttemptStrategy\b/;
-const PATCHED_BINDING = /ACTIVE_STRATEGY\s*(?::[^=]+)?=\s*stableClaimStrategy\b/;
+import { listUntrackedFiles } from "../run/factory.js";
+import { clearRunArtifacts, readUntrackedSnapshots } from "../run/store.js";
+import { LocalBranchError, REPOSITORY_ROOT, resetLocalDemoBranch } from "./branch.js";
 
 export interface DemoResetResult {
   status: "reset";
-  ticketId: typeof DEMO_TICKET_ID;
+  ticketId: "TICKET-1042";
   detail: string;
 }
 
@@ -25,17 +22,20 @@ export class ResetError extends Error {
   }
 }
 
-function sourceIsBuggy(source: string): boolean {
-  return BUGGY_BINDING.test(source) && !PATCHED_BINDING.test(source);
+export interface ResetDemoOptions {
+  /** Repository root to restore. Defaults to the real Ticketdroid root. */
+  root?: string;
+  /** Verifies the workspace is back to the planted state. Defaults to the real gate check. */
+  verifyBuggy?: () => boolean;
+  /** Reads untracked files that existed before any run (injectable for tests). */
+  readSnapshots?: () => string[];
+  /** Removes recorded run artifacts (injectable for tests). */
+  clearArtifacts?: () => void;
 }
 
-function sourceHash(source: string): string {
-  return createHash("sha256").update(source, "utf8").digest("hex");
-}
-
-function resetBranch(): void {
+function resetBranch(root: string): void {
   try {
-    resetLocalDemoBranch();
+    resetLocalDemoBranch(root);
   } catch (error) {
     if (error instanceof LocalBranchError) {
       throw new ResetError("reset_branch_failed", "Demo reset could not return the workspace to main.");
@@ -44,66 +44,62 @@ function resetBranch(): void {
   }
 }
 
+function removeNewUntrackedFiles(root: string, before: Set<string>): void {
+  const after = listUntrackedFiles(root);
+  const created = after.filter((file) => !before.has(file));
+  for (const file of created) {
+    const resolved = path.resolve(root, file);
+    if (!resolved.startsWith(`${path.resolve(root)}${path.sep}`)) {
+      throw new ResetError("reset_blocked", "Demo reset is blocked by an untrusted cleanup path.");
+    }
+    rmSync(resolved, { force: true });
+  }
+  // Prune directories the run left behind (empty only; never recursive).
+  const dirs = [...new Set(created.map((file) => path.dirname(file)))].sort(
+    (a, b) => b.split("/").length - a.split("/").length,
+  );
+  for (const dir of dirs) {
+    try {
+      rmSync(path.resolve(root, dir), { recursive: false, force: false });
+    } catch {
+      // Not empty or not removable; leave it.
+    }
+  }
+}
+
 /**
- * Restores the pre-run state using only the baseline snapshot created by the
- * run orchestrator and removes the generated run artifacts for TICKET-1042.
- * It refuses dirty or unknown workspaces rather than overwriting user edits.
+ * Restores the pre-run state entirely through git: returns to main, deletes
+ * every Ticketdroid demo branch, removes exactly the untracked files a droid
+ * run created (never pre-existing user files), drops all recorded run
+ * artifacts, and verifies the planted bug is back on main. Runs never touch
+ * main directly, so main always holds the planted state after reset.
  */
-export function resetDemo(): DemoResetResult {
-  const activePath = activeStrategyPath();
-  const artifactPath = runArtifactPath(DEMO_TICKET_ID);
-  const snapshotPath = baselineSnapshotPath(DEMO_TICKET_ID);
-  const workspace = resolveWorkspaceState(activePath);
+export function resetDemo(options: ResetDemoOptions = {}): DemoResetResult {
+  const root = options.root ?? REPOSITORY_ROOT;
+  const verifyBuggy = options.verifyBuggy ?? (() => resolveWorkspaceState(activeStrategyPath()) === "buggy");
+  const readSnapshots = options.readSnapshots ?? (() => readUntrackedSnapshots().flatMap((snapshot) => snapshot.files));
+  const clearArtifacts = options.clearArtifacts ?? clearRunArtifacts;
 
-  if (workspace === "buggy") {
-    rmSync(artifactPath, { force: true });
-    rmSync(snapshotPath, { force: true });
-    resetBranch();
-    return {
-      status: "reset",
-      ticketId: DEMO_TICKET_ID,
-      detail: "Planted TICKET-1042 bug restored; local demo branch removed and main checked out.",
-    };
+  const before = new Set(readSnapshots());
+
+  resetBranch(root);
+
+  if (before.size > 0 || listUntrackedFiles(root).length > 0) {
+    removeNewUntrackedFiles(root, before);
   }
 
-  if (workspace !== "patched") {
-    throw new ResetError(
-      "reset_blocked",
-      "Demo reset is blocked because the workspace has unexpected local edits.",
-    );
-  }
+  clearArtifacts();
 
-  if (!existsSync(snapshotPath)) {
-    throw new ResetError(
-      "reset_unavailable",
-      "Demo reset is unavailable because the pre-run baseline was not recorded.",
-    );
-  }
-
-  const baseline = readFileSync(snapshotPath, "utf8");
-  if (!sourceIsBuggy(baseline)) {
-    throw new ResetError(
-      "reset_baseline_invalid",
-      "Demo reset is blocked because the recorded baseline is not the planted bug.",
-    );
-  }
-
-  const expectedHash = sourceHash(baseline);
-  writeFileSync(activePath, baseline, "utf8");
-  const restored = readFileSync(activePath, "utf8");
-  if (sourceHash(restored) !== expectedHash || resolveWorkspaceState(activePath) !== "buggy") {
+  if (!verifyBuggy()) {
     throw new ResetError(
       "reset_verification_failed",
-      "Demo reset could not verify the planted-bug source after restoration.",
+      "Demo reset could not verify the planted-bug workspace after restoration.",
     );
   }
 
-  rmSync(artifactPath, { force: true });
-  rmSync(snapshotPath, { force: true });
-  resetBranch();
   return {
     status: "reset",
-    ticketId: DEMO_TICKET_ID,
-    detail: "Planted TICKET-1042 bug restored; local demo branch removed and main checked out.",
+    ticketId: "TICKET-1042",
+    detail: "Demo reset complete: restored the TICKET-1042 planted bug on main and removed the run branch and artifacts.",
   };
 }
