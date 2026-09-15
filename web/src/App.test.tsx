@@ -6,6 +6,19 @@ import type { Ticket, TicketRunResult } from "./types";
 
 const fixture = [
   {
+    id: "TICKET-1051",
+    source: "sentry",
+    severity: "SEV-3",
+    status: "triggered",
+    service: "claims-status-api",
+    created_at: "2026-09-12T08:00:00Z",
+    title: "Member identifier leaked in claim-status debug logs",
+    summary: "claim-status-api emits the raw memberId into debug log records; downstream shipping retains it.",
+    alert_body: "Service: claims-status-api\nSample excerpt: event=claim_status_check memberId=MBR-0001 claimId=CLM-2381",
+    wired: true,
+    notes_for_demo: "",
+  },
+  {
     id: "TICKET-1042",
     source: "pagerduty",
     severity: "SEV-2",
@@ -242,9 +255,10 @@ describe("inbox", () => {
     }
 
     // Per-row badges (status + severity) and service, for every ticket.
-    expect(screen.getAllByTestId("status")).toHaveLength(4);
-    expect(screen.getAllByTestId("severity")).toHaveLength(4);
+    expect(screen.getAllByTestId("status")).toHaveLength(5);
+    expect(screen.getAllByTestId("severity")).toHaveLength(5);
     expect(screen.getAllByText("claims-api")).toHaveLength(2);
+    expect(screen.getAllByText("claims-status-api")).toHaveLength(1);
     expect(screen.getAllByText("scheduling-api")).toHaveLength(1);
     expect(screen.getAllByText("ehr-interface-gateway")).toHaveLength(1);
 
@@ -263,6 +277,7 @@ describe("inbox", () => {
       (el) => el.textContent ?? "",
     );
     expect(tickets).toEqual([
+      "TICKET-1051",
       "TICKET-1042",
       "TICKET-1038",
       "TICKET-1029",
@@ -803,7 +818,7 @@ describe("live session window", () => {
     expect(FakeEventSource.last?.url).toBe("/api/tickets/TICKET-1038/run/events");
   });
 
-  it("streams the droid's work with a link to the Factory session", async () => {
+  it("summarizes the droid's work and lets users download the full trace", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     await renderApp("#/live/TICKET-1042");
     const source = await waitFor(() => {
@@ -818,16 +833,45 @@ describe("live session window", () => {
     });
 
     expect(screen.getByText("Duplicate claim submission detected — claims-api")).toBeInTheDocument();
-    // The latest narration shows as the focus line and stays in the feed.
-    expect(screen.getAllByText("Checking the retry path").length).toBeGreaterThan(0);
-    expect(screen.getByText("Grep")).toBeInTheDocument();
-    expect(screen.getByText("idempotency")).toBeInTheDocument();
-    expect(screen.getByText("Factory session 5fcc2798 started")).toBeInTheDocument();
+    expect(screen.getByText("Checking the retry path")).toBeInTheDocument();
+    expect(screen.getByText("Reviewing the alert")).toBeInTheDocument();
+    expect(screen.getByText("Tracing the cause")).toBeInTheDocument();
+    expect(screen.getByText("Preparing a safe fix")).toBeInTheDocument();
+    expect(screen.queryByText("idempotency")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download full trace" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open in Factory ↗" })).toHaveAttribute(
       "href",
       "factory-desktop://sessions/5fcc2798-d0da-413a",
     );
     expect(screen.getByRole("link", { name: "← Back to ticket" })).toHaveAttribute("href", "#/tickets/TICKET-1042");
+  });
+
+  it("downloads the complete streamed trace as JSON", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    const createObjectURL = vi.fn(() => "blob:ticketdroid-trace");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+    const linkClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      expect(this.download).toBe("ticket-1042-droid-trace.json");
+      expect(this.href).toBe("blob:ticketdroid-trace");
+    });
+    await renderApp("#/live/TICKET-1042");
+    const source = await waitFor(() => {
+      expect(FakeEventSource.last).not.toBeNull();
+      return FakeEventSource.last!;
+    });
+
+    await act(async () => {
+      source.emit(sessionEvent);
+      source.emit({ kind: "activity", at: 3_000, tool: "Grep", detail: "idempotency" });
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Download full trace" }));
+
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(linkClick).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:ticketdroid-trace");
   });
 
   it("lands on the completion panel with PR and Factory session links", async () => {

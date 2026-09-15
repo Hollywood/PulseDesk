@@ -1,5 +1,18 @@
 [
   {
+    "id": "TICKET-1051",
+    "source": "sentry",
+    "severity": "SEV-3",
+    "status": "triggered",
+    "service": "claims-status-api",
+    "created_at": "2026-09-12T08:00:00Z",
+    "title": "Member identifier leaked in claim-status debug logs",
+    "summary": "claim-status-api emits the raw `memberId` into debug-level log records; downstream log shipping retains it. Revenue-cycle/billing context only — identifiers in this repo are opaque synthetic IDs (e.g. MBR-0001) that do not look like real PHI.",
+    "alert_body": "Service: claims-status-api\nLog query: debug records containing a 4-digit numeric member-ref segment\nFirst seen: 2026-09-12T07:50:00Z\nOccurrences: 14 (steady rate)\nSample record excerpt (debug): event=claim_status_check memberId=MBR-0001 claimId=CLM-2381 ...\nExpected behavior: the debug record should still allow trace correlation by claimId, but the memberId column must be `[Redacted]` not the raw value.\nOn-call: paged EM (Marcus), Revenue Cycle Platform\nRunbook: none — first time this alert has fired for this service",
+    "wired": true,
+    "notes_for_demo": "The planted privacy/leak bug. Run Ticketdroid finds the planted bug, redacts `memberId` at the logger boundary (or stops passing it into the log payload), and returns a reviewable PR. The regression test fails before the fix and passes after."
+  },
+  {
     "id": "TICKET-1042",
     "source": "pagerduty",
     "severity": "SEV-2",

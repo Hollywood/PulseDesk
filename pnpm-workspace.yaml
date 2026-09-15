@@ -1,6 +1,7 @@
 packages:
   - web
   - claims-api
+  - claims-status-api
   - scheduling-api
 
 allowBuilds:
