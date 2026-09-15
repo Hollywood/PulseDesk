@@ -517,11 +517,17 @@ export function listIgnoredFiles(root: string): string[] {
   return listOtherFiles(root, ["--others", "--ignored", "--exclude-standard", "-z"]);
 }
 
+/** Files git tracks in the current index, NUL-safe. */
+export function listTrackedFiles(root: string): string[] {
+  return listOtherFiles(root, ["--cached", "-z"]);
+}
+
 function listOtherFiles(root: string, args: string[]): string[] {
   try {
     const output = execFileSync("git", ["ls-files", ...args], {
       cwd: root,
       encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     });
     return output.split("\0").filter(Boolean);

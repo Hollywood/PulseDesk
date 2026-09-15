@@ -20,7 +20,7 @@ function makeRepo(): string {
   runGit(dir, ["config", "user.email", "test@example.invalid"]);
   runGit(dir, ["config", "user.name", "Ticketdroid Test"]);
   writeFileSync(path.join(dir, "tracked.ts"), "let v = 1;\n", "utf8");
-  writeFileSync(path.join(dir, ".gitignore"), "pre.txt\nignored-out.txt\n", "utf8");
+  writeFileSync(path.join(dir, ".gitignore"), "pre.txt\nignored-out.txt\nnode_modules/\n", "utf8");
   writeFileSync(path.join(dir, "pre.txt"), "pre-existing ignored\n", "utf8");
   runGit(dir, ["add", "."]);
   runGit(dir, ["commit", "-m", "base"]);
@@ -44,9 +44,11 @@ describe("resetDemo", () => {
     expect(branch(repo)).toBe(demoBranchName("TICKET-1038"));
 
     // The droid's work: an untracked service file, an ignored build output,
-    // and an uncommitted tracked edit.
-    mkdirSync(path.join(repo, "scheduling-api"), { recursive: true });
+    // an ignored nested cache under a fresh node_modules, and an uncommitted
+    // tracked edit.
+    mkdirSync(path.join(repo, "scheduling-api", "node_modules", ".vite", "vitest"), { recursive: true });
     writeFileSync(path.join(repo, "scheduling-api", "main.ts"), "export {};\n", "utf8");
+    writeFileSync(path.join(repo, "scheduling-api", "node_modules", ".vite", "vitest", "cache"), "", "utf8");
     writeFileSync(path.join(repo, "ignored-out.txt"), "build output\n", "utf8");
     writeFileSync(path.join(repo, "tracked.ts"), "let v = 2;\n", "utf8");
 
@@ -62,13 +64,35 @@ describe("resetDemo", () => {
     expect(result.status).toBe("reset");
     expect(result.ticketId).toBe("TICKET-1042");
     expect(branch(repo)).toBe("main");
-    expect(existsSync(path.join(repo, "scheduling-api", "main.ts"))).toBe(false);
+    expect(existsSync(path.join(repo, "scheduling-api"))).toBe(false);
     expect(existsSync(path.join(repo, "ignored-out.txt"))).toBe(false);
     expect(readFileSync(path.join(repo, "tracked.ts"), "utf8")).toBe("let v = 1;\n");
     // Pre-existing ignored user file survives.
     expect(existsSync(path.join(repo, "pre.txt"))).toBe(true);
     expect(verify).toHaveBeenCalledOnce();
     expect(clearArtifacts).toHaveBeenCalledOnce();
+  });
+
+  it("never deletes ignored files inside a top-level directory that pre-dates the run", () => {
+    const repo = makeRepo();
+    // A shared dependency store the run did not create. git's ignored listing
+    // is not a faithful superset of its contents, so difference-based cleanup
+    // must not reach inside it.
+    mkdirSync(path.join(repo, "node_modules", ".pnpm", "vitest", "dist"), { recursive: true });
+    writeFileSync(path.join(repo, "node_modules", ".pnpm", "vitest", "package.json"), "{}\n", "utf8");
+    writeFileSync(path.join(repo, "node_modules", ".pnpm", "vitest", "dist", "index.js"), "", "utf8");
+    createLocalDemoBranch("TICKET-1038", repo);
+
+    resetDemo({
+      root: repo,
+      verifyBuggy: () => true,
+      // The manifest only proves node_modules existed, not each file in it.
+      readSnapshots: () => [{ files: [], ignored: ["node_modules/.pnpm/vitest/package.json", "pre.txt"] }],
+      clearArtifacts: vi.fn(),
+    });
+
+    expect(existsSync(path.join(repo, "node_modules", ".pnpm", "vitest", "dist", "index.js"))).toBe(true);
+    expect(existsSync(path.join(repo, "node_modules", ".pnpm", "vitest", "package.json"))).toBe(true);
   });
 
   it("only removes files that were not present before the run", () => {

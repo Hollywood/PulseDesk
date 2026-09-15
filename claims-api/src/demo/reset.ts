@@ -1,8 +1,8 @@
-import { rmSync } from "node:fs";
+import { rmdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { activeStrategyPath } from "../gate/run-tests.js";
 import { resolveWorkspaceState } from "../gate/state.js";
-import { listIgnoredFiles, listUntrackedFiles } from "../run/factory.js";
+import { listIgnoredFiles, listTrackedFiles, listUntrackedFiles } from "../run/factory.js";
 import { clearRunArtifacts, readUntrackedSnapshots } from "../run/store.js";
 import { LocalBranchError, REPOSITORY_ROOT, resetLocalDemoBranch } from "./branch.js";
 
@@ -44,29 +44,59 @@ function resetBranch(root: string): void {
   }
 }
 
-function removeNewOtherFiles(root: string, before: Set<string>): void {
-  const after = [...listUntrackedFiles(root), ...listIgnoredFiles(root)];
+function topLevelOf(file: string): string {
+  const [first = file] = file.split("/");
+  return first;
+}
+
+interface BeforeState {
+  /** Untracked (non-ignored) files present before the run. */
+  files: Set<string>;
+  /** Top-level entries that already existed before the run. */
+  topLevel: Set<string>;
+}
+
+function removeNewOtherFiles(root: string, before: BeforeState): void {
   const removed: string[] = [];
-  for (const file of after) {
-    if (before.has(file)) {
-      continue;
-    }
+  const remove = (file: string): void => {
     const resolved = path.resolve(root, file);
     if (!resolved.startsWith(`${path.resolve(root)}${path.sep}`)) {
       throw new ResetError("reset_blocked", "Demo reset is blocked by an untrusted cleanup path.");
     }
     rmSync(resolved, { force: true });
     removed.push(file);
+  };
+
+  // Untracked files: the run starts on a clean tree, so anything untracked that
+  // the manifest did not record is the run's own output.
+  for (const file of listUntrackedFiles(root)) {
+    if (!before.files.has(file)) {
+      remove(file);
+    }
   }
-  // Prune directories the run left behind (empty only; never recursive).
-  const dirs = [...new Set(removed.map((file) => path.dirname(file)))].sort(
-    (a, b) => b.split("/").length - a.split("/").length,
-  );
-  for (const dir of dirs) {
-    try {
-      rmSync(path.resolve(root, dir), { recursive: false, force: false });
-    } catch {
-      // Not empty or not removable; leave it.
+
+  // Ignored files: only clean inside top-level entries the run created (a new
+  // service directory and its node_modules). git's ignored listing is not a
+  // faithful superset of what lives under a pre-existing node_modules, so
+  // deleting ignored files by difference would corrupt the shared pnpm store.
+  for (const file of listIgnoredFiles(root)) {
+    if (!before.topLevel.has(topLevelOf(file))) {
+      remove(file);
+    }
+  }
+  // Prune every now-empty directory upward from each removed file; git ignores
+  // empty directories so they would otherwise survive. rmdirSync only removes
+  // empty directories (ENOTEMPTY otherwise), so pre-existing user files inside
+  // any of these directories keep them alive.
+  for (const file of removed) {
+    let dir = path.dirname(file);
+    while (dir.length > 1 && dir !== path.sep) {
+      try {
+        rmdirSync(path.resolve(root, dir));
+      } catch {
+        break; // Not empty or gone; stop climbing.
+      }
+      dir = path.dirname(dir);
     }
   }
 }
@@ -88,15 +118,32 @@ export function resetDemo(options: ResetDemoOptions = {}): DemoResetResult {
   const snapshots = readSnapshots();
   // File cleanup is only safe when every manifest comes from a real run with
   // the full untracked+ignored capture. Legacy or malformed manifests cannot
-  // prove which files pre-existed, so deleting by difference is unsafe (it
-  // could remove pre-existing ignored files such as node_modules).
+  // prove which top-level entries pre-existed, so cleaning by difference could
+  // remove a directory the run never created.
   const resolvable = snapshots.length > 0 && snapshots.every((snapshot) => !snapshot.legacy);
-  const before = new Set(snapshots.flatMap((snapshot) => [...snapshot.files, ...snapshot.ignored]));
+  const before: BeforeState = {
+    files: new Set(snapshots.flatMap((snapshot) => snapshot.files)),
+    topLevel: new Set([
+      ".git",
+      ...snapshots.flatMap((snapshot) => [...snapshot.files, ...snapshot.ignored].map(topLevelOf)),
+      ...listTrackedFiles(root).map(topLevelOf),
+    ]),
+  };
 
   resetBranch(root);
 
   if (resolvable) {
-    removeNewOtherFiles(root, before);
+    try {
+      removeNewOtherFiles(root, before);
+    } catch (error) {
+      if (error instanceof ResetError) {
+        throw error;
+      }
+      throw new ResetError(
+        "reset_failed",
+        "Demo reset could not remove the files created by the run.",
+      );
+    }
   }
 
   clearArtifacts();
