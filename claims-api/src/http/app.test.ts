@@ -184,6 +184,17 @@ describe("ticket run endpoints", () => {
       riskAndRollback: "Low. Flip back to roll back.",
       humanVerification: ["Human approval required before merge."],
     },
+    ciChecks: [
+      {
+        action: "Run",
+        command: "pnpm --dir claims-api test",
+        reason: "Exercise the logical_submission_count regression and the full claims-api suite after the patch.",
+      },
+      {
+        action: "Create",
+        reason: "Add a CI job that reruns the logical_submission_count regression on every claims-api change.",
+      },
+    ],
   };
 
   function appWithRun(startRun: AppDeps["startRun"], getRun: AppDeps["getRun"]): Express {

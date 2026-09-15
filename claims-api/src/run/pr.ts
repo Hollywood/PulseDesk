@@ -1,4 +1,4 @@
-import type { DiffResult, PrSummary, TestRunEvidence, RcaDocument } from "./types.js";
+import type { CiCheck, DiffResult, PrSummary, TestRunEvidence, RcaDocument } from "./types.js";
 
 export interface PrEvidence {
   ticket: Record<string, unknown>;
@@ -42,4 +42,29 @@ export function buildPrSummary(evidence: PrEvidence): PrSummary {
       "Rollback: flip the binding back to per-attempt keys and re-run the suite.",
     humanVerification: [...evidence.rca.humanVerification],
   };
+}
+
+/**
+ * CI actions that guard this run's fix, derived from the same real evidence the
+ * PR summary uses (the actual regression name and suite counts). Mirrors what
+ * a droid reports for its own fix, so the gate path records the same shape.
+ */
+export function buildCiChecks(evidence: PrEvidence): CiCheck[] {
+  const regression = evidence.testsAfter.regression.name;
+  return [
+    {
+      action: "Run",
+      command: "pnpm --dir claims-api test",
+      reason: `Exercise the ${regression} regression and the full claims-api suite after the patch.`,
+    },
+    {
+      action: "Run",
+      command: "pnpm --dir claims-api run typecheck",
+      reason: "Catch type errors in the patched claims-api service before merge.",
+    },
+    {
+      action: "Create",
+      reason: `Add a CI job that reruns the ${regression} regression on every claims-api change so the duplicate-submission bug cannot return silently.`,
+    },
+  ];
 }

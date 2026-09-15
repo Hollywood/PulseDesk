@@ -8,7 +8,7 @@ import { resolveWorkspaceState } from "../gate/state.js";
 import { loadTickets } from "../http/tickets.js";
 import { computeRealDiff } from "./diff.js";
 import { derivePatchedSource, readActiveStrategySource } from "./patch.js";
-import { buildPrSummary } from "./pr.js";
+import { buildCiChecks, buildPrSummary } from "./pr.js";
 import { buildRca, toTestEvidence } from "./rca.js";
 import { RunError, type DiffResult, type RunStep, type TicketRunResult } from "./types.js";
 
@@ -218,6 +218,7 @@ export async function runTicket(ticketId: string, deps: OrchestrateDeps): Promis
   const diff = deps.computeDiff(baseline, patched);
   deps.onPatchApplied?.(baseline, patched);
   const pr = buildPrSummary({ ticket, rca, testsAfter, diff });
+  const ciChecks = buildCiChecks({ ticket, rca, testsAfter, diff });
   steps.push(
     step(
       "patch",
@@ -244,5 +245,6 @@ export async function runTicket(ticketId: string, deps: OrchestrateDeps): Promis
     testsAfter,
     diff,
     pr,
+    ciChecks,
   };
 }

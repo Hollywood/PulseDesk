@@ -77,6 +77,17 @@ function validFactoryOutput(overrides: Partial<FactoryOutput> = {}): FactoryOutp
       riskAndRollback: "Low; flip the binding back to roll back.",
       humanVerification: ["Human approval required before merge."],
     },
+    ciChecks: [
+      {
+        action: "Run",
+        command: "pnpm --dir claims-api test",
+        reason: "Exercise the logical_submission_count regression and the full claims-api suite after the patch.",
+      },
+      {
+        action: "Create",
+        reason: "Add a CI job that reruns the logical_submission_count regression on every claims-api change.",
+      },
+    ],
     ...overrides,
   };
 }
@@ -141,6 +152,35 @@ describe("normalizeFactoryOutput", () => {
       expect.objectContaining({ code: "factory_output_invalid" }),
     );
   });
+
+  it("rejects missing, empty, or malformed CI checks", () => {
+    const noChecks = validFactoryOutput();
+    delete (noChecks as Partial<FactoryOutput>).ciChecks;
+    expect(() => normalizeFactoryOutput(noChecks)).toThrowError(
+      expect.objectContaining({ code: "factory_output_invalid" }),
+    );
+
+    expect(() => normalizeFactoryOutput(validFactoryOutput({ ciChecks: [] }))).toThrowError(
+      expect.objectContaining({ code: "factory_output_invalid" }),
+    );
+
+    expect(() =>
+      normalizeFactoryOutput(
+        validFactoryOutput({
+          ciChecks: [{ reason: "no action or command shape" }] as unknown as FactoryOutput["ciChecks"],
+        }),
+      ),
+    ).toThrowError(expect.objectContaining({ code: "factory_output_invalid" }));
+  });
+
+  it("normalizes a blank command away so the CI view never renders an empty code block", () => {
+    const output = validFactoryOutput({
+      ciChecks: [{ action: "Create", command: "", reason: "Add a slot-conflict CI job." }],
+    });
+    expect(normalizeFactoryOutput(output).ciChecks).toEqual([
+      { action: "Create", reason: "Add a slot-conflict CI job." },
+    ]);
+  });
 });
 
 describe("buildFactoryPrompt", () => {
@@ -161,6 +201,8 @@ describe("buildFactoryPrompt", () => {
     expect(prompt).toContain("TICKET-1038");
     expect(prompt).toContain("scheduling-api");
     expect(prompt).toContain("Intermittent double-booking");
+    expect(prompt).toContain("Recommend the CI actions that should guard this fix going forward");
+    expect(prompt).toContain("ciChecks");
     expect(prompt).toContain("Never push, merge, or deploy.");
     expect(prompt).toContain("Do not modify web/");
   });
@@ -258,6 +300,10 @@ describe("runTicketViaFactory", () => {
     expect(result.testsBefore.regression.actual).toBe(2);
     expect(result.testsAfter.regression.actual).toBeNull();
     expect(result.pr.title).toContain("TICKET-1042");
+
+    // The CI recommendations come from the droid's evidence for this bug, not static copy.
+    expect(result.ciChecks).toEqual(validFactoryOutput().ciChecks);
+    expect(result.ciChecks[0].reason).toContain("logical_submission_count");
 
     expect(result.diff.text).toContain("new-service.ts");
     expect(result.diff.path).toContain("new-service.ts");

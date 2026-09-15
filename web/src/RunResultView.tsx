@@ -1,4 +1,4 @@
-import type { RunStep, TicketRunResult } from "./types";
+import type { CiCheck, RunStep, TicketRunResult } from "./types";
 
 function durationMs(from: number, to: number): string {
   const ms = Math.max(0, to - from);
@@ -130,6 +130,17 @@ function TestCard({ label, evidence }: { label: string; evidence: TicketRunResul
       </div>
       <div className="test-card__note">{failedText}</div>
     </div>
+  );
+}
+
+/** One recommended CI action for the bug this run fixed, as the droid reported it. */
+function CiCheckRow({ check }: { check: CiCheck }) {
+  return (
+    <li className="ci__item">
+      <strong>{check.action}</strong>
+      {check.command === undefined || check.command === "" ? null : <code>{check.command}</code>}
+      <span>{check.reason}</span>
+    </li>
   );
 }
 
@@ -315,35 +326,16 @@ export function RunResultView({ run }: { run: TicketRunResult }) {
         </div>
       </section>
 
-      <section className="detail__section ci">
-        <h2>Recommended CI tests</h2>
-        <ul className="ci__list">
-          <li className="ci__item">
-            <strong>Run</strong>
-            <code>pnpm --dir claims-api test</code>
-            <span>Exercise the duplicate-claim regression and the full claims-api suite after the patch.</span>
-          </li>
-          <li className="ci__item">
-            <strong>Run</strong>
-            <code>pnpm --dir claims-api run typecheck</code>
-            <span>Catch type errors in the patched service before merge.</span>
-          </li>
-          <li className="ci__item">
-            <strong>Run</strong>
-            <code>pnpm --dir web test</code>
-            <span>Verify the timeline, diff, Pull Request, and CI recommendation views.</span>
-          </li>
-          <li className="ci__item">
-            <strong>Run</strong>
-            <code>pnpm --dir web run build</code>
-            <span>Confirm the web app still compiles as a production bundle.</span>
-          </li>
-          <li className="ci__item">
-            <strong>Create</strong>
-            <span>Add a cross-app smoke test that resets the demo, runs TICKET-1042, and verifies the patched result reaches the Pull Request view.</span>
-          </li>
-        </ul>
-      </section>
+      {run.ciChecks === undefined || run.ciChecks.length === 0 ? null : (
+        <section className="detail__section ci">
+          <h2>Recommended CI tests</h2>
+          <ul className="ci__list">
+            {run.ciChecks.map((check, index) => (
+              <CiCheckRow key={`${check.action}-${index}`} check={check} />
+            ))}
+          </ul>
+        </section>
+      )}
     </section>
   );
 }
