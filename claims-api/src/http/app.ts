@@ -9,6 +9,7 @@ import { resolveWorkspaceState } from "../gate/state.js";
 import { activeStrategyPath } from "../gate/run-tests.js";
 import { resetDemo, ResetError, type DemoResetResult } from "../demo/reset.js";
 import { buildDemoStatus } from "../demo/status.js";
+import { createHttpLogger, createLogger, type Logger } from "../logger.js";
 import { createDefaultOrchestrateDeps, runTicket } from "../run/orchestrate.js";
 import { readRunArtifact, writeBaselineSnapshot, writeRunArtifact } from "../run/store.js";
 import { RunError, type TicketRunResult } from "../run/types.js";
@@ -44,6 +45,9 @@ export function defaultDeps(): AppDeps {
 
 /** In-flight run guard: one run per ticket at a time. */
 const runningTickets = new Set<string>();
+const defaultLogger = createLogger({
+  level: process.env.NODE_ENV === "test" ? "silent" : undefined,
+});
 
 function boundedError(res: Response, status: number, code: string, message: string): void {
   res.status(status).json({ error: { code, message } });
@@ -61,9 +65,10 @@ function paramId(req: Request): string {
  * Errors are always bounded JSON with a stable code and never leak stacks,
  * source, commands, or absolute paths.
  */
-export function createApp(deps: AppDeps = defaultDeps()): Express {
+export function createApp(deps: AppDeps = defaultDeps(), logger: Logger = defaultLogger): Express {
   const app = express();
   app.disable("x-powered-by");
+  app.use(createHttpLogger(logger));
 
   app.get("/api/health", (_req: Request, res: Response) => {
     res.status(200).json({ status: "ok" });
@@ -112,6 +117,7 @@ export function createApp(deps: AppDeps = defaultDeps()): Express {
         boundedError(res, 409, error.code, error.message);
         return;
       }
+      res.err = error instanceof Error ? error : new Error("Unexpected non-error rejection");
       boundedError(res, 500, "run_failed", "The run could not be completed.");
     } finally {
       runningTickets.delete(id);
@@ -134,6 +140,7 @@ export function createApp(deps: AppDeps = defaultDeps()): Express {
         boundedError(res, 409, error.code, error.message);
         return;
       }
+      res.err = error instanceof Error ? error : new Error("Unexpected non-error rejection");
       boundedError(res, 500, "reset_failed", "The demo could not be reset.");
     }
   });
@@ -142,7 +149,8 @@ export function createApp(deps: AppDeps = defaultDeps()): Express {
     boundedError(res, 404, "not_found", "The requested resource does not exist.");
   });
 
-  app.use((_err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    res.err = err instanceof Error ? err : new Error("Unexpected non-error rejection");
     boundedError(res, 500, "internal_error", "An unexpected error occurred.");
   });
 

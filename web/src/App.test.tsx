@@ -77,10 +77,45 @@ const runResult: TicketRunResult = {
   workspaceBefore: "buggy",
   workspaceAfter: "patched",
   steps: [
-    { id: "intake", title: "Intake", detail: "Read the ticket fixture: TICKET-1042 (pagerduty, SEV-2).", startedAt: 1_000, finishedAt: 1_200 },
-    { id: "code_search", title: "Code search", detail: "Scanned claims-api/src: ACTIVE_STRATEGY = perAttemptStrategy.", startedAt: 1_200, finishedAt: 1_400 },
-    { id: "hypothesis", title: "Hypothesis", detail: "Baseline red: logical_submission_count expected 1, actual 2.", startedAt: 1_400, finishedAt: 1_600 },
-    { id: "patch", title: "Patch", detail: "Applied the fix: flipped the binding to stableClaimStrategy.", startedAt: 1_600, finishedAt: 3_000 },
+    {
+      id: "intake",
+      title: "Intake",
+      detail:
+        "Read the ticket fixture: TICKET-1042 (pagerduty, SEV-2, service claims-api) — Duplicate claim submission detected — claims-api. " +
+        "Payer clearinghouse rejected claim CLM-2381 as a duplicate. Submission log shows two outbound POSTs for the same claim ~40s apart after a gateway timeout and automatic retry.",
+      startedAt: 1_000,
+      finishedAt: 1_200,
+    },
+    {
+      id: "code_search",
+      title: "Code search",
+      detail:
+        "Scanned claims-api/src: found claims-api/src/domain/active-strategy.ts, claims-api/src/domain/idempotency.ts. " +
+        "The production binding in claims-api/src/domain/active-strategy.ts is ACTIVE_STRATEGY = perAttemptStrategy; " +
+        "idempotency derives a key per attempt (claims-api/src/domain/idempotency.ts has the :attempt- template). " +
+        "The planted regression lives in claims-api/src/regression.test.ts.",
+      startedAt: 1_200,
+      finishedAt: 1_400,
+    },
+    {
+      id: "hypothesis",
+      title: "Hypothesis",
+      detail:
+        "Baseline suite certified expected_red: 1 failing test — logical_submission_count expected 1, actual 2. " +
+        "Hypothesis: the retry sends a new idempotency key per attempt, so the clearinghouse records two logical submissions; " +
+        "the fix is the stable claim-scoped key already defined in the domain module.",
+      startedAt: 1_400,
+      finishedAt: 1_600,
+    },
+    {
+      id: "patch",
+      title: "Patch",
+      detail:
+        "Applied the real fix: flipped the production binding in claims-api/src/domain/active-strategy.ts to stableClaimStrategy " +
+        "(2 added, 2 removed lines). Suite certified patched_green: 64 passed, 0 failed (64 total).",
+      startedAt: 1_600,
+      finishedAt: 3_000,
+    },
   ],
   rca: {
     signal: "pagerduty SEV-2 on claims-api: duplicate claim submission detected.",
@@ -275,11 +310,16 @@ describe("detail view", () => {
     expect(await screen.findByText("Run complete")).toBeInTheDocument();
     const timeline = within(screen.getByLabelText("Run timeline"));
     for (const title of ["Intake", "Code search", "Hypothesis", "Patch"]) {
-      expect(timeline.getByText(title)).toBeInTheDocument();
+      expect(timeline.getAllByText(title).length).toBeGreaterThan(0);
     }
     await waitFor(() => {
-      expect(screen.getByText(/Baseline red: logical_submission_count expected 1, actual 2/)).toBeInTheDocument();
+      expect(timeline.getByText(/logical_submission_count expected 1, actual 2/)).toBeInTheDocument();
     });
+    expect(timeline.getByText("Ticket")).toBeInTheDocument();
+    expect(timeline.getByText("Source")).toBeInTheDocument();
+    expect(timeline.getByText("Production binding")).toBeInTheDocument();
+    expect(timeline.getByText("Failure")).toBeInTheDocument();
+    expect(timeline.getByText("Change")).toBeInTheDocument();
 
     // RCA fixed shape.
     const signal = screen.getByText(/pagerduty SEV-2 on claims-api/);
@@ -292,6 +332,12 @@ describe("detail view", () => {
     expect(screen.getByText(/5 passed \/ 0 failed \/ 5 total/)).toBeInTheDocument();
     expect(screen.getByTestId("diff").textContent).toContain("+import { stableClaimStrategy } from \"./idempotency.js\";");
     expect(screen.getByTestId("diff").textContent).toContain("diff --git a/claims-api/src/domain/active-strategy.ts");
+    expect(screen.getByRole("heading", { name: "Pull Request" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Title" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Body" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recommended CI tests" })).toBeInTheDocument();
+    expect(screen.getByText("pnpm --dir claims-api test")).toBeInTheDocument();
+    expect(screen.getByText(/Add a cross-app smoke test/)).toBeInTheDocument();
 
     // PR summary with the human-approval gate.
     expect(screen.getByText(/reuse a stable idempotency key/)).toBeInTheDocument();
