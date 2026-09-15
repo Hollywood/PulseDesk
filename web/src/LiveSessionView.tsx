@@ -2,9 +2,6 @@ import { useEffect, useState } from "react";
 import { formatElapsed } from "./RunLiveView";
 import type { RunEvent, Ticket } from "./types";
 
-/** Rows kept in the live feed; older work scrolls out of the window. */
-const VISIBLE_FEED = 40;
-
 /** Progress events shown in the feed; the finished event resolves the view instead. */
 type LiveEvent = Exclude<RunEvent, { kind: "finished" }>;
 
@@ -17,28 +14,47 @@ type LiveEvent = Exclude<RunEvent, { kind: "finished" }>;
 type LiveState =
   | { status: "waiting" }
   | { status: "live"; startedAt: number; events: readonly LiveEvent[] }
-  | { status: "complete"; detail: string; sessionUrl: string | null }
-  | { status: "failed"; detail: string; sessionUrl: string | null };
+  | { status: "complete"; detail: string; sessionUrl: string | null; events: readonly RunEvent[] }
+  | { status: "failed"; detail: string; sessionUrl: string | null; events: readonly RunEvent[] };
 
-interface FeedRow {
-  key: string;
-  kind: "session" | "activity" | "thinking" | "message";
-  label: string;
-  text: string;
+interface ProgressStep {
+  title: string;
+  detail: string;
+  complete: boolean;
 }
 
-function feedRow(event: LiveEvent, index: number): FeedRow {
-  const key = `${index}-${event.at}`;
-  switch (event.kind) {
-    case "session":
-      return { key, kind: "session", label: "session", text: `Factory session ${event.sessionId.slice(0, 8)} started` };
-    case "activity":
-      return { key, kind: "activity", label: event.tool, text: event.detail };
-    case "thinking":
-      return { key, kind: "thinking", label: "thinking", text: event.text };
-    case "message":
-      return { key, kind: "message", label: "droid", text: event.text };
-  }
+function progressSteps(events: readonly RunEvent[]): readonly ProgressStep[] {
+  const hasUpdate = events.some((event) => event.kind === "message" || event.kind === "thinking");
+  const hasInspection = events.some(
+    (event) => event.kind === "activity" && ["read", "grep", "glob"].includes(event.tool.toLowerCase()),
+  );
+  const hasValidation = events.some(
+    (event) =>
+      event.kind === "activity" &&
+      event.tool.toLowerCase() === "execute" &&
+      /\b(test|check|lint|build)\b/i.test(event.detail),
+  );
+
+  return [
+    { title: "Reviewing the alert", detail: "Confirming the reported impact and scope.", complete: hasUpdate },
+    { title: "Tracing the cause", detail: "Following the affected workflow and related safeguards.", complete: hasInspection },
+    { title: "Preparing a safe fix", detail: "Making a focused change and checking it against the regression.", complete: hasValidation },
+  ];
+}
+
+function downloadTrace(ticket: Ticket, events: readonly RunEvent[]): void {
+  const trace = {
+    ticketId: ticket.id,
+    ticketTitle: ticket.title,
+    downloadedAt: new Date().toISOString(),
+    events,
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(trace, null, 2)], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${ticket.id.toLowerCase()}-droid-trace.json`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function LiveSessionView({ ticket }: { ticket: Ticket }) {
@@ -74,8 +90,8 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
           }
           const sessionUrl = sessionLinkFrom(current);
           return event.ok
-            ? { status: "complete", detail: event.detail, sessionUrl }
-            : { status: "failed", detail: event.detail, sessionUrl };
+            ? { status: "complete", detail: event.detail, sessionUrl, events: [...(current.status === "live" ? current.events : []), event] }
+            : { status: "failed", detail: event.detail, sessionUrl, events: [...(current.status === "live" ? current.events : []), event] };
         });
         return;
       }
@@ -100,6 +116,8 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
     state.status === "live"
       ? [...state.events].reverse().find((event) => event.kind === "message" || event.kind === "thinking")
       : undefined;
+  const traceEvents = state.status === "waiting" ? [] : state.events;
+  const steps = progressSteps(traceEvents);
 
   return (
     <section className="live-session" aria-live="polite">
@@ -127,6 +145,11 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
             Open in Factory ↗
           </a>
         ) : null}
+        {traceEvents.length > 0 ? (
+          <button type="button" className="live-session__download" onClick={() => downloadTrace(ticket, traceEvents)}>
+            Download full trace
+          </button>
+        ) : null}
       </header>
 
       {state.status === "waiting" ? (
@@ -136,19 +159,16 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
           <p className="live-session__focus">
             {focus !== undefined && "text" in focus ? focus.text : "Starting a Factory droid session and reading the ticket…"}
           </p>
-          <ol className="live-session__feed">
-            {state.events
-              .map((event, index) => feedRow(event, index))
-              .slice(-VISIBLE_FEED)
-              .reverse()
-              .map((row) => (
-                <li key={row.key} className="live-session__row">
-                  <span className={`live-session__kind${row.kind === "activity" ? " live-session__kind--tool" : ""}`}>
-                    {row.label}
-                  </span>
-                  <span className="live-session__text">{row.text}</span>
-                </li>
-              ))}
+          <ol className="live-session__progress" aria-label="Run progress">
+            {steps.map((step, index) => (
+              <li key={step.title} className={`live-session__step${step.complete ? " live-session__step--complete" : ""}`}>
+                <span className="live-session__step-number">{step.complete ? "✓" : index + 1}</span>
+                <span>
+                  <strong>{step.title}</strong>
+                  <small>{step.detail}</small>
+                </span>
+              </li>
+            ))}
           </ol>
         </>
       ) : state.status === "complete" ? (
@@ -187,8 +207,11 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
 }
 
 function sessionLinkFrom(state: LiveState): string | null {
+  if (state.status === "waiting") {
+    return null;
+  }
   if (state.status !== "live") {
-    return state.status === "complete" ? state.sessionUrl : null;
+    return state.sessionUrl;
   }
   const session = state.events.find(
     (event): event is Extract<RunEvent, { kind: "session" }> => event.kind === "session",
