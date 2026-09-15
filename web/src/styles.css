@@ -551,9 +551,35 @@ code {
 
 .timeline__detail {
   margin: 4px 0 0;
-  font-size: 13px;
   color: var(--text-muted);
-  line-height: 1.6;
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.timeline__line {
+  display: grid;
+  grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.timeline__line--plain {
+  display: block;
+}
+
+.timeline__label {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.35px;
+  text-transform: uppercase;
+}
+
+.timeline__value {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
@@ -682,9 +708,29 @@ code {
   background: rgba(255, 107, 122, 0.09);
 }
 
+.diff__separator {
+  margin: 24px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
 .pr__title {
-  margin: 4px 0 6px;
+  margin: 0;
   font-size: 15px;
+  font-weight: 600;
+}
+
+.pr__field + .pr__field {
+  margin-top: 18px;
+}
+
+.pr__field-label {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .pr__heading {
@@ -697,6 +743,10 @@ code {
 
 .pr__heading h2 {
   margin-bottom: 0;
+  color: var(--text);
+  font-size: 18px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .metrics-strip {
@@ -773,6 +823,41 @@ code {
   font-weight: 600;
 }
 
+.ci__list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ci__item {
+  display: grid;
+  grid-template-columns: 52px minmax(0, max-content) minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.ci__item strong {
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.ci__item code {
+  overflow-wrap: anywhere;
+}
+
+.ci__item span {
+  color: var(--text-muted);
+}
+
 /* ---------- Empty / not found ---------- */
 
 .empty {
@@ -809,5 +894,13 @@ code {
 
   .metrics-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ci__item {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .ci__item span {
+    grid-column: 2;
   }
 }
