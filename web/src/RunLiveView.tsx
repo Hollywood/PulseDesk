@@ -4,7 +4,7 @@ import type { RunEvent } from "./types";
 /** Most recent actions shown in the live feed; older ones scroll out of view. */
 const VISIBLE_ACTIONS = 8;
 
-function formatElapsed(ms: number): string {
+export function formatElapsed(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
@@ -12,8 +12,8 @@ function formatElapsed(ms: number): string {
 /**
  * Live view of the droid session behind an in-flight run: elapsed time, what
  * the droid is reasoning about, the actions it is taking in the repository,
- * and a link to the session itself in the Factory app (which the run also
- * auto-opens on the machine running claims-api).
+ * and a link to the session in the Factory app (whose session page loads
+ * exec-driven runs as a snapshot, so the stream here is how to watch live).
  */
 export function RunLiveView({ events, startedAt }: { events: readonly RunEvent[]; startedAt: number }) {
   const [now, setNow] = useState(() => Date.now());

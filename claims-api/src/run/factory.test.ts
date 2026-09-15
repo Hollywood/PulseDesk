@@ -267,9 +267,8 @@ describe("runTicketViaFactory", () => {
     );
   });
 
-  it("auto-opens the live Factory session once the droid session id is known", async () => {
+  it("streams the droid's live session events through to the run view", async () => {
     const repo = makeRepo();
-    const openSession = vi.fn();
     const streamed: RunEvent[] = [];
     const invoke = vi.fn(async (args: FactorySessionInvokerArgs) => {
       args.onEvent?.({
@@ -286,24 +285,11 @@ describe("runTicketViaFactory", () => {
       root: repo,
       invoke,
       workspaceState: "buggy",
-      openSession,
       onEvent: (event) => streamed.push(event),
     });
 
-    expect(openSession).toHaveBeenCalledExactlyOnceWith("sess-1");
     expect(streamed.map((event) => event.kind)).toEqual(["session", "activity"]);
-  });
-
-  it("never opens a Factory session when no session id arrives", async () => {
-    const repo = makeRepo();
-    const openSession = vi.fn();
-    await runTicketViaFactory("TICKET-1042", {
-      root: repo,
-      invoke: invokeReturning(validFactoryOutput()),
-      workspaceState: "buggy",
-      openSession,
-    });
-    expect(openSession).not.toHaveBeenCalled();
+    expect(streamed[0]).toMatchObject({ sessionUrl: "factory-desktop://sessions/sess-1" });
   });
 
   it("refuses an unknown ticket without invoking Factory", async () => {

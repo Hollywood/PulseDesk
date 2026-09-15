@@ -93,7 +93,21 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
     });
   }
 
+  /**
+   * Opens the full-window live view of the droid's work. Called from the Run
+   * click so the browser treats it as a requested popup, and reachable from
+   * the running state if the window was closed or blocked.
+   */
+  function openLiveWindow(): void {
+    window.open(
+      `#/live/${encodeURIComponent(ticket.id)}`,
+      `ticketdroid-live-${ticket.id}`,
+      "popup,width=760,height=760",
+    );
+  }
+
   async function handleRun(): Promise<void> {
+    openLiveWindow();
     setRun({ status: "running", startedAt: Date.now(), events: [] });
     follow(Date.now());
     try {
@@ -168,12 +182,17 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
           <p className="run__result">Loading…</p>
         ) : run.status === "running" ? (
           <>
-            <button type="button" className="run__button" disabled>
-              Running Ticketdroid…
-            </button>
+            <div className="run__actions">
+              <button type="button" className="run__button" disabled>
+                Running Ticketdroid…
+              </button>
+              <button type="button" className="run__reset-button" onClick={openLiveWindow}>
+                Live window ↗
+              </button>
+            </div>
             <RunLiveView events={run.events} startedAt={run.startedAt} />
             <p className="run__result">
-              A Factory droid is working in the repository on branch ticketdroid/{ticket.id}. This takes a few minutes.
+              A Factory droid is working in the repository on branch ticketdroid/{ticket.id}. The live window shows its work as it happens.
             </p>
           </>
         ) : run.status === "resetting" ? (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchTickets } from "./api";
 import { Inbox } from "./Inbox";
+import { LiveSessionView } from "./LiveSessionView";
 import { TicketDetail } from "./TicketDetail";
 import type { Ticket } from "./types";
 
@@ -9,9 +10,13 @@ type LoadState =
   | { status: "error"; message: string }
   | { status: "ready"; tickets: readonly Ticket[] };
 
-type Route = { view: "inbox" } | { view: "detail"; id: string };
+type Route = { view: "inbox" } | { view: "detail"; id: string } | { view: "live"; id: string };
 
 function parseHash(hash: string): Route {
+  const live = hash.match(/^#\/live\/([^/]+)$/);
+  if (live !== null) {
+    return { view: "live", id: decodeURIComponent(live[1]) };
+  }
   const match = hash.match(/^#\/tickets\/([^/]+)$/);
   if (match !== null) {
     return { view: "detail", id: decodeURIComponent(match[1]) };
@@ -61,6 +66,9 @@ export default function App() {
   } else if (route.view === "detail") {
     const ticket = load.tickets.find((entry) => entry.id === route.id);
     body = ticket === undefined ? <TicketNotFound /> : <TicketDetail ticket={ticket} />;
+  } else if (route.view === "live") {
+    const ticket = load.tickets.find((entry) => entry.id === route.id);
+    body = ticket === undefined ? <TicketNotFound /> : <LiveSessionView ticket={ticket} />;
   } else {
     body = <Inbox tickets={load.tickets} />;
   }

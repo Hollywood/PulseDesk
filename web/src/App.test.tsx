@@ -178,6 +178,9 @@ async function renderApp(hash = "#/") {
 }
 
 beforeEach(() => {
+  // The live window auto-opens via window.open on the Run click; a no-op stub
+  // keeps jsdom quiet and lets tests assert the call.
+  vi.stubGlobal("open", vi.fn(() => null));
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -593,5 +596,168 @@ describe("reattaching to a run in flight", () => {
     expect(
       await screen.findByText("The Factory droid session exceeded its time limit and was stopped."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("live session window", () => {
+  class FakeEventSource {
+    static last: FakeEventSource | null = null;
+    onmessage: ((event: MessageEvent<string>) => void) | null = null;
+    onerror: (() => void) | null = null;
+    closed = false;
+
+    constructor(readonly url: string) {
+      FakeEventSource.last = this;
+    }
+
+    close(): void {
+      this.closed = true;
+    }
+
+    emit(payload: unknown): void {
+      this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(payload) }));
+    }
+  }
+
+  afterEach(() => {
+    FakeEventSource.last = null;
+  });
+
+  const sessionEvent = {
+    kind: "session" as const,
+    at: 1_000,
+    sessionId: "5fcc2798-d0da-413a",
+    sessionUrl: "factory-desktop://sessions/5fcc2798-d0da-413a",
+  };
+
+  it("auto-opens a window with the live session view when a run starts", async () => {
+    routes["POST /api/tickets/TICKET-1042/run"] = runResult;
+    const openMock = vi.mocked(globalThis.open);
+    await renderApp();
+    await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
+    await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
+
+    expect(await screen.findByText("Run complete")).toBeInTheDocument();
+    expect(openMock).toHaveBeenCalledWith(
+      "#/live/TICKET-1042",
+      "ticketdroid-live-TICKET-1042",
+      expect.stringContaining("popup"),
+    );
+  });
+
+  it("reopens the live window from the running state", async () => {
+    const passthrough = vi.mocked(globalThis.fetch).getMockImplementation();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST" && String(input).includes("/run")) {
+          return new Promise<Response>(() => {});
+        }
+        return passthrough!(input, init);
+      }),
+    );
+
+    await renderApp();
+    await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
+    await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
+
+    const openMock = vi.mocked(globalThis.open);
+    openMock.mockClear();
+    await userEvent.click(await screen.findByRole("button", { name: "Live window ↗" }));
+    expect(openMock).toHaveBeenCalledWith(
+      "#/live/TICKET-1042",
+      "ticketdroid-live-TICKET-1042",
+      expect.stringContaining("popup"),
+    );
+  });
+
+  it("waits for the run's session to start", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    await renderApp("#/live/TICKET-1038");
+    expect(screen.getByText(/Waiting for the droid session to start/)).toBeInTheDocument();
+    expect(FakeEventSource.last?.url).toBe("/api/tickets/TICKET-1038/run/events");
+  });
+
+  it("streams the droid's work with a link to the Factory session", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    await renderApp("#/live/TICKET-1042");
+    const source = await waitFor(() => {
+      expect(FakeEventSource.last).not.toBeNull();
+      return FakeEventSource.last!;
+    });
+
+    await act(async () => {
+      source.emit(sessionEvent);
+      source.emit({ kind: "thinking", at: 2_000, text: "Checking the retry path" });
+      source.emit({ kind: "activity", at: 3_000, tool: "Grep", detail: "idempotency" });
+    });
+
+    expect(screen.getByText("Duplicate claim submission detected — claims-api")).toBeInTheDocument();
+    // The latest narration shows as the focus line and stays in the feed.
+    expect(screen.getAllByText("Checking the retry path").length).toBeGreaterThan(0);
+    expect(screen.getByText("Grep")).toBeInTheDocument();
+    expect(screen.getByText("idempotency")).toBeInTheDocument();
+    expect(screen.getByText("Factory session 5fcc2798 started")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open in Factory ↗" })).toHaveAttribute(
+      "href",
+      "factory-desktop://sessions/5fcc2798-d0da-413a",
+    );
+    expect(screen.getByRole("link", { name: "← Back to ticket" })).toHaveAttribute("href", "#/tickets/TICKET-1042");
+  });
+
+  it("lands on the completion panel with PR and Factory session links", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    await renderApp("#/live/TICKET-1042");
+    const source = await waitFor(() => {
+      expect(FakeEventSource.last).not.toBeNull();
+      return FakeEventSource.last!;
+    });
+
+    await act(async () => {
+      source.emit(sessionEvent);
+      source.emit({
+        kind: "finished",
+        at: 4_000,
+        ok: true,
+        detail: "Run complete: the RCA, test evidence, and PR view are ready.",
+      });
+    });
+
+    expect(await screen.findByText("Run complete")).toBeInTheDocument();
+    expect(screen.getByText(/RCA, test evidence, and PR view are ready/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View the PR view →" })).toHaveAttribute("href", "#/tickets/TICKET-1042");
+    expect(screen.getByRole("link", { name: "Open in Factory ↗" })).toHaveAttribute(
+      "href",
+      "factory-desktop://sessions/5fcc2798-d0da-413a",
+    );
+    expect(source.closed).toBe(true);
+  });
+
+  it("shows the bounded failure detail when the run fails in the window", async () => {
+    vi.stubGlobal("EventSource", FakeEventSource);
+    await renderApp("#/live/TICKET-1042");
+    const source = await waitFor(() => {
+      expect(FakeEventSource.last).not.toBeNull();
+      return FakeEventSource.last!;
+    });
+
+    await act(async () => {
+      source.emit(sessionEvent);
+      source.emit({
+        kind: "finished",
+        at: 4_000,
+        ok: false,
+        detail: "The Factory droid session exceeded its time limit and was stopped.",
+      });
+    });
+
+    expect(await screen.findByText("The run could not be completed")).toBeInTheDocument();
+    expect(
+      screen.getByText("The Factory droid session exceeded its time limit and was stopped."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open in Factory ↗" })).toHaveAttribute(
+      "href",
+      "factory-desktop://sessions/5fcc2798-d0da-413a",
+    );
   });
 });

@@ -576,6 +576,111 @@ code {
   overflow-wrap: anywhere;
 }
 
+/* ---------- Live session window ---------- */
+.live-session {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 26px 22px 40px;
+}
+.live-session__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.live-session__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.live-session__subtitle {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.live-session__back {
+  margin-left: auto;
+}
+.live-session__waiting {
+  margin: 18px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.live-session__focus {
+  margin: 18px 0 0;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.live-session__feed {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.live-session__row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 13px;
+  border-bottom: 1px solid var(--surface-2);
+  padding-bottom: 8px;
+}
+.live-session__kind {
+  flex: none;
+  min-width: 88px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.live-session__kind--tool {
+  color: var(--accent);
+}
+.live-session__text {
+  font-family: var(--mono);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.live-session__done {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.live-session__done-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.live-session__detail {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.live-session__links {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.live-session__cta {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.live-session__cta:hover,
+.live-session__cta:focus-visible {
+  text-decoration: underline;
+}
+
 /* ---------- Run view / PR view ---------- */
 
 .run-view {
