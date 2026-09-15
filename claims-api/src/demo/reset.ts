@@ -1,4 +1,4 @@
-import { rmdirSync, rmSync } from "node:fs";
+import { type Dirent, readdirSync, rmdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { activeStrategyPath } from "../gate/run-tests.js";
 import { resolveWorkspaceState } from "../gate/state.js";
@@ -99,6 +99,42 @@ function removeNewOtherFiles(root: string, before: BeforeState): void {
       dir = path.dirname(dir);
     }
   }
+
+  // Tooling such as vitest leaves empty cache directories behind, and git never
+  // reports an empty directory, so the passes above cannot see them. Sweep them
+  // out of the top-level entries the run created; nothing else is touched.
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.isDirectory() && !before.topLevel.has(entry.name)) {
+      pruneEmptyDirs(path.join(root, entry.name));
+    }
+  }
+}
+
+/** Removes `dir` and its descendants when they hold no files. Returns true when removed. */
+function pruneEmptyDirs(dir: string): boolean {
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  let empty = true;
+  for (const entry of entries) {
+    if (entry.isDirectory() && !pruneEmptyDirs(path.join(dir, entry.name))) {
+      empty = false;
+    } else if (!entry.isDirectory()) {
+      empty = false;
+    }
+  }
+  if (!empty) {
+    return false;
+  }
+  try {
+    rmdirSync(dir);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -121,6 +157,11 @@ export function resetDemo(options: ResetDemoOptions = {}): DemoResetResult {
   // prove which top-level entries pre-existed, so cleaning by difference could
   // remove a directory the run never created.
   const resolvable = snapshots.length > 0 && snapshots.every((snapshot) => !snapshot.legacy);
+
+  resetBranch(root);
+
+  // Read tracked paths only once main is checked out: on the demo branch the
+  // run's own new service is tracked, which would make cleanup skip it.
   const before: BeforeState = {
     files: new Set(snapshots.flatMap((snapshot) => snapshot.files)),
     topLevel: new Set([
@@ -129,8 +170,6 @@ export function resetDemo(options: ResetDemoOptions = {}): DemoResetResult {
       ...listTrackedFiles(root).map(topLevelOf),
     ]),
   };
-
-  resetBranch(root);
 
   if (resolvable) {
     try {

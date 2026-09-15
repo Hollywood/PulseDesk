@@ -73,6 +73,31 @@ describe("resetDemo", () => {
     expect(clearArtifacts).toHaveBeenCalledOnce();
   });
 
+  it("removes a service the run committed on the demo branch, including its ignored leftovers", () => {
+    const repo = makeRepo();
+    createLocalDemoBranch("TICKET-1038", repo);
+
+    // The droid commits the new service on the demo branch, then its test run
+    // leaves an ignored cache file and an empty cache directory behind.
+    mkdirSync(path.join(repo, "scheduling-api", "src"), { recursive: true });
+    writeFileSync(path.join(repo, "scheduling-api", "src", "scheduler.ts"), "export {};\n", "utf8");
+    runGit(repo, ["add", "."]);
+    runGit(repo, ["commit", "-m", "fix: deduplicate reschedules"]);
+    mkdirSync(path.join(repo, "scheduling-api", "node_modules", ".vite", "vitest", "run"), { recursive: true });
+    writeFileSync(path.join(repo, "scheduling-api", "node_modules", ".vite", "vitest", "results.json"), "{}\n", "utf8");
+    mkdirSync(path.join(repo, "scheduling-api", "node_modules", ".cache"), { recursive: true });
+
+    resetDemo({
+      root: repo,
+      verifyBuggy: () => true,
+      readSnapshots: () => [{ files: [], ignored: ["pre.txt"] }],
+      clearArtifacts: vi.fn(),
+    });
+
+    expect(branch(repo)).toBe("main");
+    expect(existsSync(path.join(repo, "scheduling-api"))).toBe(false);
+  });
+
   it("never deletes ignored files inside a top-level directory that pre-dates the run", () => {
     const repo = makeRepo();
     // A shared dependency store the run did not create. git's ignored listing
