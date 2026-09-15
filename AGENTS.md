@@ -21,11 +21,9 @@ evidence that claims-api records and the web PR view renders.
   bounded error. Do not route runs through the deterministic local
   orchestration (`runTicket`) — it remains only as the planted-bug gate/CI
   validation, not the app's run path.
-- When a run starts, the web app auto-opens a live window (`#/live/<TICKET-ID>`)
-  streaming the droid's session. The Factory app only live-streams sessions it
-  owns; exec-driven sessions load there as a transcript snapshot, so the run
-  links to the Factory session (`factory-desktop://sessions/<id>`) instead of
-  auto-opening it mid-run.
+- While a run is in progress, the web app streams a compact progress view in
+  the ticket detail. The "Live Window" control opens the Factory session in a
+  new browser tab (`https://app.factory.ai/sessions/<id>`).
 - Runs happen on a per-ticket local branch (`ticketdroid/<TICKET-ID>`); the
   droid commits its work there and claims-api computes the genuine git diff.
 - Demo reset is git-based: it returns to `main`, deletes all

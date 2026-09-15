@@ -96,7 +96,7 @@ export type RunEvent =
       kind: "session";
       at: number;
       sessionId: string;
-      /** Deep link that opens this live session in the Factory desktop app. */
+      /** Browser URL for this session in the Factory app. */
       sessionUrl: string;
     }
   | { kind: "activity"; at: number; tool: string; detail: string }

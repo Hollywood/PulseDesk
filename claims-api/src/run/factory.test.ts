@@ -321,7 +321,7 @@ describe("runTicketViaFactory", () => {
         kind: "session",
         at: 1,
         sessionId: "sess-1",
-        sessionUrl: "factory-desktop://sessions/sess-1",
+        sessionUrl: "https://app.factory.ai/sessions/sess-1",
       });
       args.onEvent?.({ kind: "activity", at: 2, tool: "Read", detail: "AGENTS.md" });
       return { structuredOutput: validFactoryOutput(), durationMs: 500, sessionId: "sess-1" };
@@ -335,7 +335,7 @@ describe("runTicketViaFactory", () => {
     });
 
     expect(streamed.map((event) => event.kind)).toEqual(["session", "activity"]);
-    expect(streamed[0]).toMatchObject({ sessionUrl: "factory-desktop://sessions/sess-1" });
+    expect(streamed[0]).toMatchObject({ sessionUrl: "https://app.factory.ai/sessions/sess-1" });
   });
 
   it("refuses an unknown ticket without invoking Factory", async () => {
@@ -391,13 +391,13 @@ describe("runTicketViaFactory", () => {
 describe("parseDebugEvent", () => {
   const at = 1_700_000_000_000;
 
-  it("reports the Factory session id and live-session deep link from the init event", () => {
+  it("reports the Factory session id and browser URL from the init event", () => {
     const line = JSON.stringify({ type: "system", subtype: "init", session_id: "5fcc2798-d0da" });
     expect(parseDebugEvent(line, at)).toEqual({
       kind: "session",
       at,
       sessionId: "5fcc2798-d0da",
-      sessionUrl: "factory-desktop://sessions/5fcc2798-d0da",
+      sessionUrl: "https://app.factory.ai/sessions/5fcc2798-d0da",
     });
   });
 

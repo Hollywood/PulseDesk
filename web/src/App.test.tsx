@@ -208,8 +208,8 @@ async function renderApp(hash = "#/") {
 }
 
 beforeEach(() => {
-  // The live window auto-opens via window.open on the Run click; a no-op stub
-  // keeps jsdom quiet and lets tests assert the call.
+  // The Factory session opens via window.open from the Live Window control;
+  // a no-op stub keeps jsdom quiet and lets tests assert the call.
   vi.stubGlobal("open", vi.fn(() => null));
   vi.stubGlobal(
     "fetch",
@@ -635,7 +635,7 @@ describe("live droid session", () => {
         kind: "session",
         at: 1,
         sessionId: "5fcc2798-d0da-413a",
-        sessionUrl: "factory-desktop://sessions/5fcc2798-d0da-413a",
+        sessionUrl: "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
       });
       source.emit({ kind: "thinking", at: 2, text: "Checking the retry path" });
       source.emit({ kind: "activity", at: 3, tool: "Grep", detail: "idempotency" });
@@ -651,7 +651,7 @@ describe("live droid session", () => {
     expect(screen.getByText("5fcc2798")).toBeInTheDocument();
     // The live Factory session is reachable from the run panel.
     const openLink = screen.getByRole("link", { name: /Open in Factory/ });
-    expect(openLink).toHaveAttribute("href", "factory-desktop://sessions/5fcc2798-d0da-413a");
+    expect(openLink).toHaveAttribute("href", "https://app.factory.ai/sessions/5fcc2798-d0da-413a");
   });
 
   it("closes the stream once the run resolves", async () => {
@@ -767,10 +767,10 @@ describe("live session window", () => {
     kind: "session" as const,
     at: 1_000,
     sessionId: "5fcc2798-d0da-413a",
-    sessionUrl: "factory-desktop://sessions/5fcc2798-d0da-413a",
+    sessionUrl: "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
   };
 
-  it("auto-opens a window with the live session view when a run starts", async () => {
+  it("does not open a live window when a run starts", async () => {
     routes["POST /api/tickets/TICKET-1042/run"] = runResult;
     const openMock = vi.mocked(globalThis.open);
     await renderApp();
@@ -778,15 +778,12 @@ describe("live session window", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
 
     expect(await screen.findByText("Run complete")).toBeInTheDocument();
-    expect(openMock).toHaveBeenCalledWith(
-      "#/live/TICKET-1042",
-      "ticketdroid-live-TICKET-1042",
-      expect.stringContaining("popup"),
-    );
+    expect(openMock).not.toHaveBeenCalled();
   });
 
-  it("reopens the live window from the running state", async () => {
+  it("opens the Factory session in a new browser tab from the running state", async () => {
     const passthrough = vi.mocked(globalThis.fetch).getMockImplementation();
+    vi.stubGlobal("EventSource", FakeEventSource);
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -801,13 +798,21 @@ describe("live session window", () => {
     await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
     await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
 
+    const source = await waitFor(() => {
+      expect(FakeEventSource.last).not.toBeNull();
+      return FakeEventSource.last!;
+    });
+    await act(async () => {
+      source.emit(sessionEvent);
+    });
+
     const openMock = vi.mocked(globalThis.open);
     openMock.mockClear();
-    await userEvent.click(await screen.findByRole("button", { name: "Live window ↗" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Live Window ↗" }));
     expect(openMock).toHaveBeenCalledWith(
-      "#/live/TICKET-1042",
-      "ticketdroid-live-TICKET-1042",
-      expect.stringContaining("popup"),
+      "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
+      "_blank",
+      "noopener,noreferrer",
     );
   });
 
@@ -841,7 +846,7 @@ describe("live session window", () => {
     expect(screen.getByRole("button", { name: "Download full trace" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open in Factory ↗" })).toHaveAttribute(
       "href",
-      "factory-desktop://sessions/5fcc2798-d0da-413a",
+      "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
     );
     expect(screen.getByRole("link", { name: "← Back to ticket" })).toHaveAttribute("href", "#/tickets/TICKET-1042");
   });
@@ -897,7 +902,7 @@ describe("live session window", () => {
     expect(screen.getByRole("link", { name: "View the PR view →" })).toHaveAttribute("href", "#/tickets/TICKET-1042");
     expect(screen.getByRole("link", { name: "Open in Factory ↗" })).toHaveAttribute(
       "href",
-      "factory-desktop://sessions/5fcc2798-d0da-413a",
+      "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
     );
     expect(source.closed).toBe(true);
   });
@@ -926,7 +931,7 @@ describe("live session window", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open in Factory ↗" })).toHaveAttribute(
       "href",
-      "factory-desktop://sessions/5fcc2798-d0da-413a",
+      "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
     );
   });
 });

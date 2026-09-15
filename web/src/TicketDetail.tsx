@@ -93,21 +93,20 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
     });
   }
 
-  /**
-   * Opens the full-window live view of the droid's work. Called from the Run
-   * click so the browser treats it as a requested popup, and reachable from
-   * the running state if the window was closed or blocked.
-   */
+  /** Opens the Factory session in a new browser tab once its id is available. */
   function openLiveWindow(): void {
-    window.open(
-      `#/live/${encodeURIComponent(ticket.id)}`,
-      `ticketdroid-live-${ticket.id}`,
-      "popup,width=760,height=760",
+    if (run.status !== "running") {
+      return;
+    }
+    const session = run.events.find(
+      (event): event is Extract<RunEvent, { kind: "session" }> => event.kind === "session",
     );
+    if (session !== undefined) {
+      window.open(session.sessionUrl, "_blank", "noopener,noreferrer");
+    }
   }
 
   async function handleRun(): Promise<void> {
-    openLiveWindow();
     setRun({ status: "running", startedAt: Date.now(), events: [] });
     follow(Date.now());
     try {
@@ -186,13 +185,18 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
               <button type="button" className="run__button" disabled>
                 Running Ticketdroid…
               </button>
-              <button type="button" className="run__reset-button" onClick={openLiveWindow}>
-                Live window ↗
+              <button
+                type="button"
+                className="run__reset-button"
+                onClick={openLiveWindow}
+                disabled={!run.events.some((event) => event.kind === "session")}
+              >
+                Live Window ↗
               </button>
             </div>
             <RunLiveView events={run.events} startedAt={run.startedAt} />
             <p className="run__result">
-              A Factory droid is working in the repository on branch ticketdroid/{ticket.id}. The live window shows its work as it happens.
+              A Factory droid is working in the repository on branch ticketdroid/{ticket.id}. Open the session in Factory for the full transcript.
             </p>
           </>
         ) : run.status === "resetting" ? (

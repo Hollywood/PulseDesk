@@ -5,12 +5,7 @@ import type { RunEvent, Ticket } from "./types";
 /** Progress events shown in the feed; the finished event resolves the view instead. */
 type LiveEvent = Exclude<RunEvent, { kind: "finished" }>;
 
-/**
- * The droid's live work in a window of its own: the Factory app only
- * live-streams sessions it owns, so an exec-driven run's session page there is
- * a snapshot. Ticketdroid streams the same session's progress here, and links
- * to the Factory session for the full transcript.
- */
+/** Legacy in-app run progress view, retained for direct links to the route. */
 type LiveState =
   | { status: "waiting" }
   | { status: "live"; startedAt: number; events: readonly LiveEvent[] }
@@ -141,7 +136,7 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
           </dl>
         ) : null}
         {state.status === "live" && sessionUrl !== null ? (
-          <a className="run-live__link" href={sessionUrl}>
+          <a className="run-live__link" href={sessionUrl} target="_blank" rel="noreferrer">
             Open in Factory ↗
           </a>
         ) : null}
@@ -180,7 +175,7 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
               View the PR view →
             </a>
             {state.sessionUrl !== null ? (
-              <a className="live-session__cta" href={state.sessionUrl}>
+              <a className="live-session__cta" href={state.sessionUrl} target="_blank" rel="noreferrer">
                 Open in Factory ↗
               </a>
             ) : null}
@@ -195,7 +190,7 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
               Back to the ticket →
             </a>
             {state.sessionUrl !== null ? (
-              <a className="live-session__cta" href={state.sessionUrl}>
+              <a className="live-session__cta" href={state.sessionUrl} target="_blank" rel="noreferrer">
                 Open in Factory ↗
               </a>
             ) : null}
