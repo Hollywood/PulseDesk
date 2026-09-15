@@ -70,6 +70,20 @@ export interface PrSummary {
   humanVerification: string[];
 }
 
+/**
+ * One recommended CI action, catered to the exact bug this run fixed. The droid
+ * that fixed the bug derives them from the fix it just made (they name the real
+ * regression, service, and commands of that bug — never static demo copy).
+ */
+export interface CiCheck {
+  /** Action verb, e.g. "Run" or "Create". */
+  action: string;
+  /** Command to run, when the action is a command; omitted for prose actions. */
+  command?: string;
+  /** Why this action guards the bug this run fixed. */
+  reason: string;
+}
+
 export interface TicketRunResult {
   ticketId: string;
   /** Local-only branch created for this run; never pushed by Ticketdroid. */
@@ -85,6 +99,8 @@ export interface TicketRunResult {
   testsAfter: TestRunEvidence;
   diff: DiffResult;
   pr: PrSummary;
+  /** CI actions recommended for the bug this run fixed, from the droid's evidence. */
+  ciChecks: CiCheck[];
 }
 
 /** Bounded run failure surfaced as a JSON error, never a stack trace. */

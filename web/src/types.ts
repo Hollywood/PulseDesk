@@ -76,6 +76,16 @@ export interface PrSummary {
   humanVerification: string[];
 }
 
+/** One recommended CI action, catered to the bug this run fixed. */
+export interface CiCheck {
+  /** Action verb, e.g. "Run" or "Create". */
+  action: string;
+  /** Command to run, when the action is a command; omitted for prose actions. */
+  command?: string;
+  /** Why this action guards the bug this run fixed. */
+  reason: string;
+}
+
 /**
  * Live progress from an in-flight droid session, streamed by claims-api while
  * the run is still working. Demo telemetry only: the recorded run result stays
@@ -116,4 +126,10 @@ export interface TicketRunResult {
   testsAfter: TestRunEvidence;
   diff: DiffResult;
   pr: PrSummary;
+  /**
+   * CI actions recommended for the bug this run fixed, as reported by the droid
+   * that fixed it. Optional so a recorded run from before this field existed
+   * still renders.
+   */
+  ciChecks?: CiCheck[];
 }

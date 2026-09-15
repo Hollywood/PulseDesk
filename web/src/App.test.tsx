@@ -157,6 +157,23 @@ const runResult: TicketRunResult = {
     riskAndRollback: "Low. A single binding change; flip back to roll back.",
     humanVerification: ["Human approval required before merge."],
   },
+  ciChecks: [
+    {
+      action: "Run",
+      command: "pnpm --dir claims-api test",
+      reason: "Exercise the logical_submission_count regression and the full claims-api suite after the patch.",
+    },
+    {
+      action: "Run",
+      command: "pnpm --dir claims-api run typecheck",
+      reason: "Catch type errors in the patched claims-api service before merge.",
+    },
+    {
+      action: "Create",
+      reason:
+        "Add a CI job that reruns the logical_submission_count regression on every claims-api change so the duplicate-submission bug cannot return silently.",
+    },
+  ],
 };
 
 /** Returns a controller that closes over the json payload each route serves. */
@@ -334,7 +351,11 @@ describe("detail view", () => {
     expect(screen.getByRole("heading", { name: "Body" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Recommended CI tests" })).toBeInTheDocument();
     expect(screen.getByText("pnpm --dir claims-api test")).toBeInTheDocument();
-    expect(screen.getByText(/Add a cross-app smoke test/)).toBeInTheDocument();
+    // The CI actions come from this run's evidence: they name the regression
+    // this run fixed, not static TICKET-1042 copy.
+    expect(screen.getByText(/Exercise the logical_submission_count regression/)).toBeInTheDocument();
+    expect(screen.getByText(/reruns the logical_submission_count regression on every claims-api change/)).toBeInTheDocument();
+    expect(document.querySelectorAll(".ci__item")).toHaveLength(3);
 
     // PR summary with the human-approval gate.
     expect(screen.getByText(/reuse a stable idempotency key/)).toBeInTheDocument();
@@ -361,6 +382,110 @@ describe("detail view", () => {
     expect(await screen.findByText("Run complete")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Run Ticketdroid" })).not.toBeInTheDocument();
     expect(screen.getByText(/Workspace is now patched on local branch ticketdroid\/TICKET-1042/)).toBeInTheDocument();
+  });
+
+  it("caters the recommended CI actions to the bug each run fixed", async () => {
+    const schedulingRun: TicketRunResult = {
+      ticketId: "TICKET-1038",
+      branchName: "ticketdroid/TICKET-1038",
+      status: "complete",
+      startedAt: 1_000,
+      finishedAt: 3_000,
+      workspaceBefore: "buggy",
+      workspaceAfter: "patched",
+      steps: [
+        {
+          id: "intake",
+          title: "Intake",
+          detail:
+            "Read the ticket fixture: TICKET-1038 (sentry, SEV-3, service scheduling-api) — Intermittent double-booking on appointment reschedule.",
+          startedAt: 1_000,
+          finishedAt: 1_400,
+        },
+        {
+          id: "code_search",
+          title: "Code search",
+          detail: "Created scheduling-api/ and located the reschedule path in scheduling-api/src/slots.ts.",
+          startedAt: 1_400,
+          finishedAt: 1_800,
+        },
+        {
+          id: "hypothesis",
+          title: "Hypothesis",
+          detail: "Baseline suite certified expected_red: slot_conflict expected 0, actual 1.",
+          startedAt: 1_800,
+          finishedAt: 2_200,
+        },
+        {
+          id: "patch",
+          title: "Patch",
+          detail: "Applied the real fix; suite certified patched_green: 3 passed, 0 failed (3 total).",
+          startedAt: 2_200,
+          finishedAt: 3_000,
+        },
+      ],
+      rca: {
+        signal: "sentry SEV-3 on scheduling-api: intermittent double-booking on reschedule.",
+        customerImpact: "Two appointment slots created for one pair; scheduling impact only.",
+        hypothesis: "The reschedule path books the new slot before releasing the old one, so a retry double-books.",
+        filesToInspect: ["scheduling-api/src/slots.ts"],
+        blastRadius: "Appointment reschedule retries in scheduling-api.",
+        testsThatMustPass: ["slot_conflict regression", "Full scheduling-api suite green"],
+        humanVerification: ["The diff contains only the slot-release ordering change."],
+      },
+      testsBefore: {
+        total: 3,
+        passed: 2,
+        failed: 1,
+        regression: { name: "slot_conflict", expected: 0, actual: 1 },
+        regressionPassed: false,
+        certification: "expected_red",
+      },
+      testsAfter: {
+        total: 3,
+        passed: 3,
+        failed: 0,
+        regression: { name: "slot_conflict", expected: 0, actual: null },
+        regressionPassed: true,
+        certification: "patched_green",
+      },
+      diff: {
+        path: "scheduling-api/src/slots.ts",
+        text: 'diff --git a/scheduling-api/src/slots.ts b/scheduling-api/src/slots.ts\n-await bookSlot(slot.newId); releaseSlot(slot.oldId);\n+releaseSlot(slot.oldId); await bookSlot(slot.newId);',
+        added: 2,
+        removed: 2,
+      },
+      pr: {
+        title: "fix(scheduling-api): guard the reschedule slot conflict (TICKET-1038)",
+        why: "TICKET-1038 — intermittent double-booking on appointment reschedule.",
+        whatChanged: ["Release the old slot before booking the new one in the reschedule path."],
+        tests: ["slot_conflict regression: expected 0 — red before, green after."],
+        riskAndRollback: "Low. Ordering change only; revert to roll back.",
+        humanVerification: ["Human approval required before merge."],
+      },
+      ciChecks: [
+        {
+          action: "Run",
+          command: "pnpm --dir scheduling-api test",
+          reason: "Exercise the slot_conflict regression and the full scheduling-api suite after the patch.",
+        },
+        {
+          action: "Create",
+          reason:
+            "Add a CI job that reruns the slot_conflict regression on every scheduling-api change so the double-booking bug cannot return silently.",
+        },
+      ],
+    };
+    routes["/api/tickets/TICKET-1038/run"] = schedulingRun;
+    await renderApp("#/tickets/TICKET-1038");
+
+    expect(await screen.findByText("Run complete")).toBeInTheDocument();
+    expect(screen.getByText("pnpm --dir scheduling-api test")).toBeInTheDocument();
+    expect(screen.getByText(/Exercise the slot_conflict regression/)).toBeInTheDocument();
+    expect(screen.getByText(/reruns the slot_conflict regression on every scheduling-api change/)).toBeInTheDocument();
+    // A scheduling-api fix must not carry the claims-api bug's recommendations.
+    expect(screen.queryByText("pnpm --dir claims-api test")).not.toBeInTheDocument();
+    expect(screen.queryByText(/logical_submission_count/)).not.toBeInTheDocument();
   });
 
   it("resets the recorded run through the demo reset control", async () => {

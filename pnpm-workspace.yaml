@@ -1,6 +1,7 @@
 packages:
   - web
   - claims-api
+  - scheduling-api
 
 allowBuilds:
   esbuild: true

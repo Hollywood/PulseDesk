@@ -11,6 +11,7 @@ import { loadTickets } from "../http/tickets.js";
 import { factorySessionUrl } from "./session_link.js";
 import {
   RunError,
+  type CiCheck,
   type DiffResult,
   type PrSummary,
   type RcaDocument,
@@ -365,11 +366,23 @@ const TEST_EVIDENCE_SCHEMA = {
   },
 } as const;
 
+/** JSON Schema of one recommended CI action, mirroring run/types.ts CiCheck. */
+const CI_CHECK_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["action", "reason"],
+  properties: {
+    action: { type: "string" },
+    command: { type: "string" },
+    reason: { type: "string" },
+  },
+} as const;
+
 /** JSON Schema the Ticketdroid run output must satisfy, mirroring run/types.ts. */
 export const FACTORY_OUTPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["steps", "rca", "testsBefore", "testsAfter", "pr"],
+  required: ["steps", "rca", "testsBefore", "testsAfter", "pr", "ciChecks"],
   properties: {
     steps: {
       type: "array",
@@ -423,6 +436,11 @@ export const FACTORY_OUTPUT_SCHEMA = {
         humanVerification: { type: "array", items: { type: "string" } },
       },
     },
+    ciChecks: {
+      type: "array",
+      minItems: 1,
+      items: CI_CHECK_SCHEMA,
+    },
   },
 } as const;
 
@@ -433,6 +451,7 @@ export interface FactoryOutput {
   testsBefore: TestRunEvidence;
   testsAfter: TestRunEvidence;
   pr: PrSummary;
+  ciChecks: CiCheck[];
 }
 
 function isString(value: unknown): value is string {
@@ -501,6 +520,24 @@ function isPr(value: unknown): value is PrSummary {
   );
 }
 
+function isCiCheck(value: unknown): value is CiCheck {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    isString(record.action) &&
+    // A blank command is accepted and normalized away, so an empty string from
+    // the droid cannot fail an otherwise-good run or render an empty code block.
+    (record.command === undefined || typeof record.command === "string") &&
+    isString(record.reason)
+  );
+}
+
+function isCiChecks(value: unknown): value is CiCheck[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isCiCheck);
+}
+
 /** Strictly validates the droid's structured output into the fixed run shape. */
 export function normalizeFactoryOutput(value: unknown): FactoryOutput {
   if (typeof value !== "object" || value === null) {
@@ -530,12 +567,23 @@ export function normalizeFactoryOutput(value: unknown): FactoryOutput {
     );
   }
 
-  if (!isRca(record.rca) || !isTestEvidence(record.testsBefore) || !isTestEvidence(record.testsAfter) || !isPr(record.pr)) {
+  if (
+    !isRca(record.rca) ||
+    !isTestEvidence(record.testsBefore) ||
+    !isTestEvidence(record.testsAfter) ||
+    !isPr(record.pr) ||
+    !isCiChecks(record.ciChecks)
+  ) {
     throw new RunError(
       "factory_output_invalid",
-      "The Factory droid session returned incomplete RCA, test, or PR evidence, so Ticketdroid recorded no result.",
+      "The Factory droid session returned incomplete RCA, test, PR, or CI evidence, so Ticketdroid recorded no result.",
     );
   }
+
+  const ciChecks = (record.ciChecks as CiCheck[]).map((check) => ({
+    ...check,
+    command: isString(check.command) ? check.command : undefined,
+  }));
 
   return {
     steps: stepsValue.map((entry) => {
@@ -550,6 +598,7 @@ export function normalizeFactoryOutput(value: unknown): FactoryOutput {
     testsBefore: record.testsBefore as TestRunEvidence,
     testsAfter: record.testsAfter as TestRunEvidence,
     pr: record.pr as PrSummary,
+    ciChecks,
   };
 }
 
@@ -598,6 +647,13 @@ const OUTPUT_SHAPE_SPEC = {
     riskAndRollback: "String — risk and rollback plan",
     humanVerification: ["String — human verification checklist"],
   },
+  ciChecks: [
+    {
+      action: "String — verb like Run or Create",
+      command: "String — the command to run; omit this key for non-command actions",
+      reason: "String — why this action guards the bug this run fixed, naming the actual regression and service",
+    },
+  ],
 } as const;
 
 /** Builds the self-contained prompt the Ticketdroid droid session is asked to follow. */
@@ -631,7 +687,8 @@ export function buildFactoryPrompt(ticket: Record<string, unknown>): string {
     "2. Find the service named in the ticket. If it does not exist in this repository yet, create it as a new workspace directory named after the service (e.g. scheduling-api/) with a small, zero-dependency TypeScript implementation of the affected behavior, then implement the fix in it.",
     "3. Reproduce the problem with a regression test: run the suite before the fix (expected red) and after (expected green). Prefer the repository's existing vitest setup; you may add a minimal package.json for a new service.",
     "4. Do the work for real in the current working tree and commit your changes to the current branch when done; the demo shows the resulting diff.",
-    "5. Finish by answering with ONLY a single JSON object matching the OUTPUT FORMAT below. Do not wrap it in markdown or add prose. Every field must report real evidence from this run — no placeholder copy.",
+    "5. Recommend the CI actions that should guard this fix going forward, catered to the bug you just fixed: the suite command that covers the regression you wrote, a typecheck/build for the service you touched, and any follow-up test worth creating. Each entry's reason must name the real regression, service, or files of this run — never generic copy that could apply to any ticket.",
+    "6. Finish by answering with ONLY a single JSON object matching the OUTPUT FORMAT below. Do not wrap it in markdown or add prose. Every field must report real evidence from this run — no placeholder copy.",
     "",
     "OUTPUT FORMAT (exact keys; the demo renders exactly this):",
     JSON.stringify(OUTPUT_SHAPE_SPEC, null, 2),
@@ -822,5 +879,6 @@ export async function runTicketViaFactory(
     testsAfter: factoryOutput.testsAfter,
     diff,
     pr: factoryOutput.pr,
+    ciChecks: factoryOutput.ciChecks,
   };
 }

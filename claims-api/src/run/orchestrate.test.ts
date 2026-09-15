@@ -148,6 +148,10 @@ describe("runTicket happy path", () => {
     expect(result.pr.why).toContain("TICKET-1042");
     expect(result.pr.humanVerification.length).toBeGreaterThan(0);
 
+    expect(result.ciChecks.length).toBeGreaterThan(0);
+    expect(result.ciChecks[0].command).toBe("pnpm --dir claims-api test");
+    expect(result.ciChecks[0].reason).toContain("logical_submission_count");
+
     expect(writePatch).toHaveBeenCalledTimes(1);
     expect(writePatch.mock.calls[0][0]).toContain("stableClaimStrategy");
     expect(runSuite).toHaveBeenCalledTimes(2);
