@@ -60,10 +60,8 @@ export class InMemoryClaimStore implements ClaimStore {
 /**
  * Returns the current clearinghouse-side status of the given claim. Emits one
  * debug record per lookup so an operator can trace the request id through the
- * status pipeline. The planted TICKET-1051 bug is that this debug record
- * includes the raw `memberId`; the proposed fix is to add `memberId` (or the
- * equivalent request-scope key) to the logger's redact paths so the value never
- * reaches the log stream.
+ * status pipeline. The logger redacts `memberId` before writing this record so trace correlation
+ * remains available without exposing the member identifier in the log stream.
  */
 export function getStatus(query: ClaimStatusQuery, options: GetStatusOptions): ClaimStatusResult {
   const { claimId, memberId } = query;

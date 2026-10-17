@@ -1,11 +1,10 @@
 import type { IdempotencyStrategy } from "./idempotency.js";
-import { perAttemptStrategy } from "./idempotency.js";
+import { stableClaimStrategy } from "./idempotency.js";
 
 /**
  * The single production idempotency binding for claim submission.
  *
- * The TICKET-1042 demo patch flips this one binding from `perAttemptStrategy`
- * to `stableClaimStrategy`. The state-aware test gate classifies the workspace
- * by reading this declaration, so its exact shape is a stable contract.
+ * Retries reuse a stable claim-scoped idempotency key so a timeout cannot create
+ * a duplicate logical submission. The regression suite protects this binding.
  */
-export const ACTIVE_STRATEGY: IdempotencyStrategy = perAttemptStrategy;
+export const ACTIVE_STRATEGY: IdempotencyStrategy = stableClaimStrategy;

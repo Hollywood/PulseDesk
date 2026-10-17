@@ -15,10 +15,8 @@ export interface LoggerOptions {
   level?: "debug" | "info" | "warn";
   /**
    * Dotted payload paths whose values are replaced with "[Redacted]" before the
-   * record is written. Defaults cover auth/cookie-style credentials but do NOT
-   * cover member-identifying fields; the TICKET-1051 fix is to add
-   * `memberId` (or equivalent) here. Identifiers in payloads are always opaque
-   * synthetic IDs — never real PHI.
+   * record is written. Defaults cover auth/cookie-style credentials and member-identifying fields.
+   * Identifiers in payloads are always opaque synthetic IDs — never real PHI.
    */
   redactPaths?: readonly string[];
 }
@@ -26,7 +24,7 @@ export interface LoggerOptions {
 type Level = "debug" | "info" | "warn";
 const LEVEL_RANK: Record<Level, number> = { debug: 10, info: 20, warn: 30 };
 
-const DEFAULT_REDACT_PATHS: readonly string[] = ["authorization", "cookie"];
+const DEFAULT_REDACT_PATHS: readonly string[] = ["authorization", "cookie", "memberId"];
 
 function redactPath(payload: Record<string, unknown>, path: string): Record<string, unknown> {
   const segments = path.split(".");
