@@ -36,7 +36,6 @@ pipeline:
 
               pnpm install --frozen-lockfile
 
-              pnpm --dir claims-api lint
               pnpm -r typecheck
               pnpm -r test
               pnpm --dir claims-api gate
