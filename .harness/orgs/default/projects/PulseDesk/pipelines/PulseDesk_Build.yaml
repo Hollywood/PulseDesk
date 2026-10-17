@@ -30,6 +30,9 @@ pipeline:
             script: |-
               set -eu
 
+              apk add --no-cache git
+              git --version
+
               node --version
               npm install --global pnpm@11.25.0
               pnpm --version
