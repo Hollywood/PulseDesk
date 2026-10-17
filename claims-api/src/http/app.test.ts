@@ -1,6 +1,8 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Express } from "express";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -107,6 +109,25 @@ describe("claims-api http foundation", () => {
     const raw = await res.text();
     assertNoDisclosure(raw);
     expect(JSON.parse(raw).error.code).toBe("not_found");
+  });
+
+  it("serves a configured production web build without shadowing API routes", async () => {
+    const webDistDir = mkdtempSync(join(tmpdir(), "pulsedesk-web-"));
+    writeFileSync(join(webDistDir, "index.html"), "<main>PulseDesk</main>");
+    const webApp = createApp(defaultDeps(), undefined, { webDistDir });
+    const webRunning = await start(webApp);
+    try {
+      const page = await fetch(`${webRunning.base}/tickets/TICKET-1042`);
+      expect(page.status).toBe(200);
+      expect(await page.text()).toContain("PulseDesk");
+
+      const missingApi = await fetch(`${webRunning.base}/api/does-not-exist`);
+      expect(missingApi.status).toBe(404);
+      expect(missingApi.headers.get("content-type")).toContain("application/json");
+    } finally {
+      await stop(webRunning.server);
+      rmSync(webDistDir, { recursive: true, force: true });
+    }
   });
 
   it("demo status reports authoritative buggy classification", async () => {

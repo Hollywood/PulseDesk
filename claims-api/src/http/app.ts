@@ -4,6 +4,8 @@ import express, {
   type Request,
   type Response,
 } from "express";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import type { WorkspaceState } from "../gate/certify.js";
 import { resolveWorkspaceState } from "../gate/state.js";
 import { activeStrategyPath } from "../gate/run-tests.js";
@@ -27,6 +29,11 @@ export interface AppDeps {
   getRun: (ticketId: string) => TicketRunResult | null;
   /** Restores the planted-bug workspace and removes the generated demo run. */
   resetDemo?: () => DemoResetResult;
+}
+
+export interface AppOptions {
+  /** Optional production web build directory served by the API process. */
+  webDistDir?: string;
 }
 
 export function defaultDeps(): AppDeps {
@@ -104,7 +111,11 @@ function paramId(req: Request): string {
  * Errors are always bounded JSON with a stable code and never leak stacks,
  * source, commands, or absolute paths.
  */
-export function createApp(deps: AppDeps = defaultDeps(), logger: Logger = defaultLogger): Express {
+export function createApp(
+  deps: AppDeps = defaultDeps(),
+  logger: Logger = defaultLogger,
+  options: AppOptions = {},
+): Express {
   const app = express();
   app.disable("x-powered-by");
   app.use(createHttpLogger(logger));
@@ -227,6 +238,19 @@ export function createApp(deps: AppDeps = defaultDeps(), logger: Logger = defaul
       boundedError(res, 500, "reset_failed", "The demo could not be reset.");
     }
   });
+
+  // In the container image, one process serves both the React build and API.
+  // Development remains unchanged because webDistDir is only set at runtime.
+  if (options.webDistDir !== undefined) {
+    const webDistDir = resolve(options.webDistDir);
+    const webIndex = resolve(webDistDir, "index.html");
+    if (existsSync(webIndex)) {
+      app.use(express.static(webDistDir, { index: false }));
+      app.get(/^(?!\/api(?:\/|$)).*/, (_req: Request, res: Response) => {
+        res.sendFile(webIndex);
+      });
+    }
+  }
 
   app.use((_req: Request, res: Response) => {
     boundedError(res, 404, "not_found", "The requested resource does not exist.");

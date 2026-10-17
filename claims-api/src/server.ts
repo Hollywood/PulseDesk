@@ -6,7 +6,9 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 const PORT = Number(process.env.PORT ?? "4310");
 
 const logger = createLogger();
-const app = createApp(defaultDeps(), logger);
+const app = createApp(defaultDeps(), logger, {
+  webDistDir: process.env.WEB_DIST_DIR,
+});
 
 const server: Server = app.listen(PORT, HOST, () => {
   logger.info({ event: "server_started", host: HOST, port: PORT }, "claims-api listening");
