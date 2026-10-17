@@ -22,13 +22,17 @@ pipeline:
       steps:
         - id: Validate_PulseDesk
           name: Validate PulseDesk
-          timeout: 15m
           run:
+            container: 
+              image: node:22-alpine
+              connector: account.harnessImage
+            shell: sh
             script: |-
               set -eu
 
-              corepack enable
-              corepack prepare pnpm@11.25.0 --activate
+              node --version
+              npm install --global pnpm@11.25.0
+              pnpm --version
 
               pnpm install --frozen-lockfile
 
