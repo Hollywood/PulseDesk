@@ -1,0 +1,51 @@
+pipeline:
+  id: PulseDesk_Build
+  name: PulseDesk Build
+  description: Validate PulseDesk and publish a container image to GHCR.
+  tags:
+    ai_generated: ""
+  clone:
+    enabled: true
+    connector: PulseDesk_GitHub
+    repo: Hollywood/PulseDesk
+    ref:
+      type: branch
+      name: main
+  stages:
+    - id: Build_Test_and_Publish
+      name: Build Test and Publish
+      description: Validate PulseDesk and publish a container image to GHCR.
+      runtime: cloud
+      platform:
+        os: linux
+        arch: amd64
+      steps:
+        - id: Validate_PulseDesk
+          name: Validate PulseDesk
+          timeout: 15m
+          run:
+            script: |-
+              set -eu
+
+              corepack enable
+              corepack prepare pnpm@11.25.0 --activate
+
+              pnpm install --frozen-lockfile
+
+              pnpm --dir claims-api lint
+              pnpm -r typecheck
+              pnpm -r test
+              pnpm --dir claims-api gate
+
+              pnpm --dir claims-api build
+              pnpm --dir web build
+        - id: Build_and_Push_PulseDesk
+          name: Build and Push PulseDesk
+          build:
+            uses: buildAndPushToDocker
+            with:
+              connector: PulseDesk_GHCR
+              repo: ghcr.io/hollywood/pulsedesk
+              tags:
+                - ${{ codebase.commitSha }}
+                - latest
