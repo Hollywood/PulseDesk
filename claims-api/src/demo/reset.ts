@@ -2,7 +2,7 @@ import { type Dirent, readdirSync, rmdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { activeStrategyPath } from "../gate/run-tests.js";
 import { resolveWorkspaceState } from "../gate/state.js";
-import { listIgnoredFiles, listTrackedFiles, listUntrackedFiles } from "../run/factory.js";
+import { listIgnoredFiles, listTrackedFiles, listUntrackedFiles } from "../run/workspace.js";
 import { clearRunArtifacts, readUntrackedSnapshots } from "../run/store.js";
 import { LocalBranchError, REPOSITORY_ROOT, resetLocalDemoBranch } from "./branch.js";
 
@@ -23,7 +23,7 @@ export class ResetError extends Error {
 }
 
 export interface ResetDemoOptions {
-  /** Repository root to restore. Defaults to the real Ticketdroid root. */
+  /** Repository root to restore. Defaults to the real PulseDesk root. */
   root?: string;
   /** Verifies the workspace is back to the planted state. Defaults to the real gate check. */
   verifyBuggy?: () => boolean;
@@ -139,7 +139,7 @@ function pruneEmptyDirs(dir: string): boolean {
 
 /**
  * Restores the pre-run state entirely through git: returns to main, deletes
- * every Ticketdroid demo branch, removes exactly the untracked files a droid
+ * every PulseDesk demo branch, removes exactly the untracked files a run
  * run created (never pre-existing user files), drops all recorded run
  * artifacts, and verifies the planted bug is back on main. Runs never touch
  * main directly, so main always holds the planted state after reset.

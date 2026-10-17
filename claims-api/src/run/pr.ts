@@ -47,7 +47,7 @@ export function buildPrSummary(evidence: PrEvidence): PrSummary {
 /**
  * CI actions that guard this run's fix, derived from the same real evidence the
  * PR summary uses (the actual regression name and suite counts). Mirrors what
- * a droid reports for its own fix, so the gate path records the same shape.
+ * an automated workflow reports for its fix, so the gate path records the same shape.
  */
 export function buildCiChecks(evidence: PrEvidence): CiCheck[] {
   const regression = evidence.testsAfter.regression.name;

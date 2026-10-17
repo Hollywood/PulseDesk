@@ -356,7 +356,7 @@ describe("live run events", () => {
       getTickets: defaultDeps().getTickets,
       getWorkspaceState: defaultDeps().getWorkspaceState,
       startRun: async () => {
-        throw new RunError("factory_unavailable", "not used in this test");
+        throw new RunError("automation_unavailable", "not used in this test");
       },
       getRun: () => null,
     });
@@ -399,13 +399,13 @@ describe("live run events", () => {
         kind: "session",
         at: 1,
         sessionId: "5fcc2798-d0da",
-        sessionUrl: "https://app.factory.ai/sessions/5fcc2798-d0da",
+        sessionUrl: "https://agent.example/sessions/5fcc2798-d0da",
       });
       stream.end(true, "Run complete.", 2);
 
       const body = await (await fetch(`${running.base}/api/tickets/TICKET-1029/run/events`)).text();
       expect(body).toContain('"sessionId":"5fcc2798-d0da"');
-      expect(body).toContain('"sessionUrl":"https://app.factory.ai/sessions/5fcc2798-d0da"');
+      expect(body).toContain('"sessionUrl":"https://agent.example/sessions/5fcc2798-d0da"');
       expect(body).toContain('"kind":"finished"');
     } finally {
       await stop(running.server);

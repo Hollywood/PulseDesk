@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-export const DEMO_BRANCH_PREFIX = "ticketdroid/";
+export const DEMO_BRANCH_PREFIX = "pulsedesk/";
 
 export const REPOSITORY_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -47,7 +47,7 @@ function currentBranch(root: string): string {
 }
 
 /**
- * Creates a per-ticket allowlisted local demo branch (`ticketdroid/<TICKET-ID>`)
+ * Creates a per-ticket allowlisted local demo branch (`pulsedesk/<TICKET-ID>`)
  * without contacting a remote. Refuses when the working tree is not clean, so
  * the run never starts on top of uncommitted user work and reset can always
  * restore main safely.
@@ -77,7 +77,7 @@ export function createLocalDemoBranch(ticketId: string, root: string = REPOSITOR
 }
 
 /**
- * Returns the local checkout to main and removes every Ticketdroid demo branch,
+ * Returns the local checkout to main and removes every PulseDesk demo branch,
  * discarding any uncommitted run edits left on those branches. It never pushes,
  * deletes a remote branch, or touches another local branch.
  */
@@ -86,7 +86,7 @@ export function resetLocalDemoBranch(root: string = REPOSITORY_ROOT): void {
   if (branch !== "main" && !isDemoBranch(branch)) {
     throw new LocalBranchError(
       "branch_reset_blocked",
-      "The demo reset can only clean the Ticketdroid demo branch.",
+      "The demo reset can only clean the PulseDesk demo branch.",
     );
   }
 

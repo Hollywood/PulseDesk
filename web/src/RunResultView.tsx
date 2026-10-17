@@ -133,7 +133,7 @@ function TestCard({ label, evidence }: { label: string; evidence: TicketRunResul
   );
 }
 
-/** One recommended CI action for the bug this run fixed, as the droid reported it. */
+/** One recommended CI action for the bug this run fixed. */
 function CiCheckRow({ check }: { check: CiCheck }) {
   return (
     <li className="ci__item">
@@ -322,7 +322,7 @@ export function RunResultView({ run }: { run: TicketRunResult }) {
           </div>
         </div>
         <div className="pr__approval" role="status">
-          Ready for human review. Requires human approval before merge — Ticketdroid never merges or deploys on its own.
+          Ready for human review. Requires human approval before merge — PulseDesk never merges or deploys on its own.
         </div>
       </section>
 

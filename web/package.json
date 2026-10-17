@@ -1,5 +1,5 @@
 {
-  "name": "@ticketdroid/web",
+  "name": "@pulsedesk/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",

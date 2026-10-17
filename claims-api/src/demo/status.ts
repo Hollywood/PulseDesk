@@ -34,7 +34,7 @@ export function buildDemoStatus(workspace: WorkspaceState): DemoStatus {
         ...base,
         gate: "expected_red",
         mutationAllowed: true,
-        detail: "Planted regression is red as expected; ready for a Ticketdroid run.",
+        detail: "Planted regression is red as expected; ready for a PulseDesk run.",
       };
     case "patched":
       return {

@@ -1,6 +1,6 @@
 /**
- * Live progress for an in-flight droid run. The run itself is a single long
- * HTTP request, so the UI follows this stream to see what the droid is doing
+ * Live progress for an in-flight analysis. The run itself is a single long
+ * HTTP request, so the UI follows this stream to see what the workflow is doing
  * while it works. Events are held in memory only: they are demo telemetry, not
  * run evidence (the recorded artifact remains the source of truth).
  */
@@ -9,7 +9,7 @@ export type RunEvent =
       kind: "session";
       at: number;
       sessionId: string;
-      /** Deep link that opens this live session in the Factory desktop app. */
+      /** Deep link for an optional external agent session. */
       sessionUrl: string;
     }
   | { kind: "activity"; at: number; tool: string; detail: string }

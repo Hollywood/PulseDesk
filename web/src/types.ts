@@ -13,7 +13,7 @@ export interface Ticket {
   title: string;
   summary: string;
   alert_body: string;
-  /** Whether Ticketdroid will run RCA + patch + PR for this ticket. All fixtures are wired; runs call back to Factory. */
+  /** Whether PulseDesk has a deterministic local RCA and patch workflow for this ticket. */
   wired: boolean;
   notes_for_demo: string;
 }
@@ -25,7 +25,7 @@ export interface ErrorBody {
   };
 }
 
-/** A single step of a completed Ticketdroid run, in execution order. */
+/** A single step of a completed PulseDesk run, in execution order. */
 export interface RunStep {
   id: "intake" | "code_search" | "hypothesis" | "patch";
   title: string;
@@ -87,7 +87,7 @@ export interface CiCheck {
 }
 
 /**
- * Live progress from an in-flight droid session, streamed by claims-api while
+ * Live progress from an in-flight analysis, streamed by claims-api while
  * the run is still working. Demo telemetry only: the recorded run result stays
  * the source of truth for evidence.
  */
@@ -96,7 +96,7 @@ export type RunEvent =
       kind: "session";
       at: number;
       sessionId: string;
-      /** Browser URL for this session in the Factory app. */
+      /** Browser URL for an optional external agent session. */
       sessionUrl: string;
     }
   | { kind: "activity"; at: number; tool: string; detail: string }
@@ -110,10 +110,10 @@ export interface DemoResetResult {
   detail: string;
 }
 
-/** Full result of one Ticketdroid run, as recorded by claims-api. */
+/** Full result of one PulseDesk run, as recorded by claims-api. */
 export interface TicketRunResult {
   ticketId: string;
-  /** Local-only branch created for this run; never pushed by Ticketdroid. */
+  /** Local-only branch created for this run; never pushed by PulseDesk. */
   branchName?: string;
   status: "complete";
   startedAt: number;
@@ -127,8 +127,8 @@ export interface TicketRunResult {
   diff: DiffResult;
   pr: PrSummary;
   /**
-   * CI actions recommended for the bug this run fixed, as reported by the droid
-   * that fixed it. Optional so a recorded run from before this field existed
+   * CI actions recommended for the bug this run fixed. Optional so a recorded
+   * run from before this field existed
    * still renders.
    */
   ciChecks?: CiCheck[];

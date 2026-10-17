@@ -1,5 +1,5 @@
 {
-  "name": "@ticketdroid/claims-api",
+  "name": "@pulsedesk/claims-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",

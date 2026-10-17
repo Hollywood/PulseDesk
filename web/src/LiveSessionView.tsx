@@ -47,7 +47,7 @@ function downloadTrace(ticket: Ticket, events: readonly RunEvent[]): void {
   const url = URL.createObjectURL(new Blob([JSON.stringify(trace, null, 2)], { type: "application/json" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${ticket.id.toLowerCase()}-droid-trace.json`;
+  link.download = `${ticket.id.toLowerCase()}-analysis-trace.json`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -57,7 +57,7 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    document.title = `${ticket.id} — live droid session`;
+    document.title = `${ticket.id} — live analysis`;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [ticket.id]);
@@ -137,7 +137,7 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
         ) : null}
         {state.status === "live" && sessionUrl !== null ? (
           <a className="run-live__link" href={sessionUrl} target="_blank" rel="noreferrer">
-            Open in Factory ↗
+            Open agent session ↗
           </a>
         ) : null}
         {traceEvents.length > 0 ? (
@@ -148,11 +148,11 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
       </header>
 
       {state.status === "waiting" ? (
-        <p className="live-session__waiting">Waiting for the droid session to start…</p>
+        <p className="live-session__waiting">Waiting for the analysis to start…</p>
       ) : state.status === "live" ? (
         <>
           <p className="live-session__focus">
-            {focus !== undefined && "text" in focus ? focus.text : "Starting a Factory droid session and reading the ticket…"}
+            {focus !== undefined && "text" in focus ? focus.text : "Starting the local analysis and reading the ticket…"}
           </p>
           <ol className="live-session__progress" aria-label="Run progress">
             {steps.map((step, index) => (
@@ -176,7 +176,7 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
             </a>
             {state.sessionUrl !== null ? (
               <a className="live-session__cta" href={state.sessionUrl} target="_blank" rel="noreferrer">
-                Open in Factory ↗
+                Open agent session ↗
               </a>
             ) : null}
           </div>
@@ -191,7 +191,7 @@ export function LiveSessionView({ ticket }: { ticket: Ticket }) {
             </a>
             {state.sessionUrl !== null ? (
               <a className="live-session__cta" href={state.sessionUrl} target="_blank" rel="noreferrer">
-                Open in Factory ↗
+                Open agent session ↗
               </a>
             ) : null}
           </div>

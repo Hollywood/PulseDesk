@@ -10,9 +10,8 @@ export function formatElapsed(ms: number): string {
 }
 
 /**
- * Live view of the droid session behind an in-flight run: elapsed time, what
- * the droid is reasoning about, the actions it is taking in the repository,
- * and a link to the session in the Factory app.
+ * Live view of an in-flight analysis: elapsed time, current focus, repository
+ * actions, and an optional link to an external agent session.
  */
 export function RunLiveView({ events, startedAt }: { events: readonly RunEvent[]; startedAt: number }) {
   const [now, setNow] = useState(() => Date.now());
@@ -32,7 +31,7 @@ export function RunLiveView({ events, startedAt }: { events: readonly RunEvent[]
     <section className="run-live" aria-live="polite">
       <header className="run-live__head">
         <span className="run-live__pulse" aria-hidden="true" />
-        <h3 className="run-live__title">Droid session in progress</h3>
+        <h3 className="run-live__title">Automated analysis in progress</h3>
         <dl className="run-live__metrics">
           <div>
             <dt>Elapsed</dt>
@@ -51,7 +50,7 @@ export function RunLiveView({ events, startedAt }: { events: readonly RunEvent[]
         </dl>
         {session !== undefined ? (
           <a className="run-live__link" href={session.sessionUrl} target="_blank" rel="noreferrer">
-            Open in Factory ↗
+            Open agent session ↗
           </a>
         ) : null}
       </header>
@@ -59,7 +58,7 @@ export function RunLiveView({ events, startedAt }: { events: readonly RunEvent[]
       <p className="run-live__focus">
         {narration !== undefined && "text" in narration
           ? narration.text
-          : "Starting a Factory droid session and reading the ticket…"}
+          : "Starting the local analysis and reading the ticket…"}
       </p>
 
       {actions.length > 0 ? (

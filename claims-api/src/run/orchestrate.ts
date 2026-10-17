@@ -113,7 +113,7 @@ const WIRING_ERRORS: Record<Exclude<WorkspaceState, "buggy">, { code: string; me
 };
 
 /**
- * Executes one truthful Ticketdroid run for a ticket: intake, code search,
+ * Executes one truthful PulseDesk run for a ticket: intake, code search,
  * baseline tests (expected red), hypothesis/RCA, the real patch, post-patch
  * tests (green), and the genuine diff. Every step is recorded in order with
  * real evidence and timestamps. The patch is rolled back verbatim if the

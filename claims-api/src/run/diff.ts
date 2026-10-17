@@ -16,7 +16,7 @@ export function computeRealDiff(
   patchedContent: string,
   repoRelativePath: string,
 ): DiffResult {
-  const root = mkdtempSync(path.join(tmpdir(), "ticketdroid-diff-"));
+  const root = mkdtempSync(path.join(tmpdir(), "pulsedesk-diff-"));
   try {
     const file = path.join(root, repoRelativePath);
     mkdirSync(path.dirname(file), { recursive: true });

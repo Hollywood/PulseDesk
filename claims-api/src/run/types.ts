@@ -1,5 +1,5 @@
 /**
- * Structured output of a Ticketdroid run. All fields are derived from real
+ * Structured output of a PulseDesk run. All fields are derived from real
  * run-time evidence (fixture content, actual files searched, actual test
  * results, the real applied patch, and a genuine git diff) — nothing is
  * pre-written demo copy.
@@ -71,7 +71,7 @@ export interface PrSummary {
 }
 
 /**
- * One recommended CI action, catered to the exact bug this run fixed. The droid
+ * One recommended CI action, catered to the exact bug this run fixed. The workflow
  * that fixed the bug derives them from the fix it just made (they name the real
  * regression, service, and commands of that bug — never static demo copy).
  */
@@ -86,7 +86,7 @@ export interface CiCheck {
 
 export interface TicketRunResult {
   ticketId: string;
-  /** Local-only branch created for this run; never pushed by Ticketdroid. */
+  /** Local-only branch created for this run; never pushed by PulseDesk. */
   branchName?: string;
   status: "complete";
   startedAt: number;
@@ -99,7 +99,7 @@ export interface TicketRunResult {
   testsAfter: TestRunEvidence;
   diff: DiffResult;
   pr: PrSummary;
-  /** CI actions recommended for the bug this run fixed, from the droid's evidence. */
+  /** CI actions recommended for the bug this run fixed, from the run evidence. */
   ciChecks: CiCheck[];
 }
 

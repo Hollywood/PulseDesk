@@ -25,7 +25,7 @@ export interface RunTestsOptions {
  * execution only; no shell string interpolation.
  */
 export async function runRawClaimsTests(options: RunTestsOptions): Promise<GateRunResult> {
-  const reportDir = mkdtempSync(path.join(tmpdir(), "ticketdroid-gate-"));
+  const reportDir = mkdtempSync(path.join(tmpdir(), "pulsedesk-gate-"));
   const reportFile = path.join(reportDir, "vitest-report.json");
   const vitestEntry = resolveVitestEntry();
 

@@ -1,27 +1,23 @@
-# Demo
+# PulseDesk local demo
 
-## Reset
-- Run the demo-reset skill / restore planted-bug state
-- Confirm claims-api tests fail on the duplicate-claim regression
+## Start the application
 
-## Click path
-1. Start API and web
-2. Open ticket inbox
-3. Click any ticket (TICKET-1042, 1038, 1029, or 1015)
-4. Click Run Ticketdroid — claims-api calls back to Factory, which starts a
-   real droid session for the ticket
-5. Watch the compact run progress on the ticket page. Once the session starts,
-   click "Live Window ↗" to open the applicable Factory session in a new
-   browser tab.
-6. Narrate the live session panel on the ticket page while it works: elapsed
-   time, the droid's current reasoning, and each repository action
-7. When the droid finishes, walk Intake → Code search → Hypothesis → Patch
-8. Open PR view (reviewable — no auto-merge, no auto-deploy)
-9. Show human verification checklist
+1. Run `pnpm install` at the repository root.
+2. Run `pnpm dev` in `claims-api/`.
+3. Run `pnpm dev` in `web/`.
+4. Open the local URL printed by Vite.
 
-Every run happens on a local `ticketdroid/<TICKET-ID>` branch only; it never
-pushes. Reset removes that local branch, untracked run files, and run
-artifacts, then checks out `main`.
+## Walk through the ticket workflow
 
-## Backup
-- 90s screen recording if live path flakes
+1. Open `TICKET-1042` from the inbox.
+2. Review the synthetic alert and customer-impact summary.
+3. Select **Run PulseDesk analysis**.
+4. Wait while the local regression gate reproduces the failure, applies the
+   focused patch on a `pulsedesk/TICKET-1042` branch, and reruns the tests.
+5. Review the timeline, root-cause analysis, test evidence, diff, and proposed
+   pull-request description.
+6. Select **Reset demo** before repeating the walkthrough.
+
+The local workflow never pushes, merges, or deploys code. A human remains
+responsible for reviewing the proposed patch and deciding whether it should
+enter the delivery pipeline.

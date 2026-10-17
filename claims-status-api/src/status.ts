@@ -61,7 +61,7 @@ export class InMemoryClaimStore implements ClaimStore {
  * Returns the current clearinghouse-side status of the given claim. Emits one
  * debug record per lookup so an operator can trace the request id through the
  * status pipeline. The planted TICKET-1051 bug is that this debug record
- * includes the raw `memberId`; the droid's fix is to add `memberId` (or the
+ * includes the raw `memberId`; the proposed fix is to add `memberId` (or the
  * equivalent request-scope key) to the logger's redact paths so the value never
  * reaches the log stream.
  */

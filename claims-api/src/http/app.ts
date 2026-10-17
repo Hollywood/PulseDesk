@@ -12,15 +12,16 @@ import { resetDemo, ResetError, type DemoResetResult } from "../demo/reset.js";
 import { buildDemoStatus } from "../demo/status.js";
 import { createHttpLogger, createLogger, type Logger } from "../logger.js";
 import { clearRunEvents, runEvents, type RunEvent } from "../run/events.js";
-import { runTicketViaFactory, listIgnoredFiles, listUntrackedFiles } from "../run/factory.js";
+import { createDefaultOrchestrateDeps, runTicket } from "../run/orchestrate.js";
 import { readRunArtifact, writeRunArtifact, writeUntrackedSnapshot } from "../run/store.js";
 import { RunError, type TicketRunResult } from "../run/types.js";
+import { listIgnoredFiles, listUntrackedFiles } from "../run/workspace.js";
 import { loadTickets, type Ticket } from "./tickets.js";
 
 export interface AppDeps {
   getTickets: () => readonly Ticket[];
   getWorkspaceState: () => WorkspaceState;
-  /** Executes a full Ticketdroid run for a ticket and persists artifacts. */
+  /** Executes a full PulseDesk analysis for a ticket and persists artifacts. */
   startRun: (ticketId: string) => Promise<TicketRunResult>;
   /** Reads the recorded run for a ticket, or null when none exists yet. */
   getRun: (ticketId: string) => TicketRunResult | null;
@@ -50,10 +51,15 @@ export function defaultDeps(): AppDeps {
       const stream = runEvents(ticketId);
       stream.begin();
       try {
-        const result = await runTicketViaFactory(ticketId, {
-          branchName,
-          onEvent: (event) => stream.publish(event),
+        stream.publish({
+          kind: "message",
+          at: Date.now(),
+          text: "Running the local regression gate and preparing a focused patch.",
         });
+        const result = await runTicket(
+          ticketId,
+          createDefaultOrchestrateDeps({ branchName }),
+        );
         writeRunArtifact(ticketId, result);
         stream.end(true, "Run complete: the RCA, test evidence, and PR view are ready.", Date.now());
         return result;
@@ -93,7 +99,7 @@ function paramId(req: Request): string {
 }
 
 /**
- * Builds the read-only Ticketdroid API. Dependencies are injected so demo
+ * Builds the PulseDesk API. Dependencies are injected so demo
  * status can be exercised deterministically for every workspace classification.
  * Errors are always bounded JSON with a stable code and never leak stacks,
  * source, commands, or absolute paths.

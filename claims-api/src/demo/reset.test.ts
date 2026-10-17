@@ -14,11 +14,11 @@ function runGit(dir: string, args: string[]): string {
 
 /** Repo with a tracked file, a .gitignore, and one pre-existing ignored file. */
 function makeRepo(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), "ticketdroid-reset-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "pulsedesk-reset-"));
   tempDirs.push(dir);
   runGit(dir, ["init", "-q", "-b", "main"]);
   runGit(dir, ["config", "user.email", "test@example.invalid"]);
-  runGit(dir, ["config", "user.name", "Ticketdroid Test"]);
+  runGit(dir, ["config", "user.name", "PulseDesk Test"]);
   writeFileSync(path.join(dir, "tracked.ts"), "let v = 1;\n", "utf8");
   writeFileSync(path.join(dir, ".gitignore"), "pre.txt\nignored-out.txt\nnode_modules/\n", "utf8");
   writeFileSync(path.join(dir, "pre.txt"), "pre-existing ignored\n", "utf8");
@@ -43,7 +43,7 @@ describe("resetDemo", () => {
     createLocalDemoBranch("TICKET-1038", repo);
     expect(branch(repo)).toBe(demoBranchName("TICKET-1038"));
 
-    // The droid's work: an untracked service file, an ignored build output,
+    // The automation's work: an untracked service file, an ignored build output,
     // an ignored nested cache under a fresh node_modules, and an uncommitted
     // tracked edit.
     mkdirSync(path.join(repo, "scheduling-api", "node_modules", ".vite", "vitest"), { recursive: true });
@@ -77,7 +77,7 @@ describe("resetDemo", () => {
     const repo = makeRepo();
     createLocalDemoBranch("TICKET-1038", repo);
 
-    // The droid commits the new service on the demo branch, then its test run
+    // The automated run commits the new service on the demo branch, then its test run
     // leaves an ignored cache file and an empty cache directory behind.
     mkdirSync(path.join(repo, "scheduling-api", "src"), { recursive: true });
     writeFileSync(path.join(repo, "scheduling-api", "src", "scheduler.ts"), "export {};\n", "utf8");
@@ -126,7 +126,7 @@ describe("resetDemo", () => {
 
     // User file created while the run was in flight; run-created file.
     writeFileSync(path.join(repo, "keep.txt"), "user file\n", "utf8");
-    writeFileSync(path.join(repo, "droid-created.txt"), "run file\n", "utf8");
+    writeFileSync(path.join(repo, "automation-created.txt"), "run file\n", "utf8");
 
     resetDemo({
       root: repo,
@@ -136,7 +136,7 @@ describe("resetDemo", () => {
     });
 
     expect(existsSync(path.join(repo, "keep.txt"))).toBe(true);
-    expect(existsSync(path.join(repo, "droid-created.txt"))).toBe(false);
+    expect(existsSync(path.join(repo, "automation-created.txt"))).toBe(false);
   });
 
   it("is safe to run when no demo branch exists and no manifest was recorded", () => {

@@ -78,7 +78,7 @@ export default function App() {
       <header className="app__header">
         <a className="brand" href="#/">
           <span className="brand__mark" aria-hidden="true" />
-          Ticketdroid
+          PulseDesk
         </a>
         <span className="brand__sub">Revenue cycle on-call inbox</span>
       </header>

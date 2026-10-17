@@ -45,7 +45,7 @@ describe("computeRealDiff", () => {
     expect(diff.text).toContain("-export const ACTIVE_STRATEGY: IdempotencyStrategy = perAttemptStrategy;");
     expect(diff.text).toContain("+export const ACTIVE_STRATEGY: IdempotencyStrategy = stableClaimStrategy;");
     // The temp workspace must never leak into the displayed diff.
-    expect(diff.text).not.toContain("ticketdroid-diff-");
+    expect(diff.text).not.toContain("pulsedesk-diff-");
     expect(diff.added).toBe(2);
     expect(diff.removed).toBe(2);
   });

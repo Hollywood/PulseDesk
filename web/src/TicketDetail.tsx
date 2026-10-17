@@ -63,7 +63,7 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
   }
 
   /**
-   * Follows the droid session's live events. `startedAt` is null when the run
+   * Follows the analysis run's live events. `startedAt` is null when the run
    * was started elsewhere, in which case the first event's timestamp is used.
    * A finished event resolves the view from the recorded run, so a reloaded page
    * still lands on the result.
@@ -93,7 +93,7 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
     });
   }
 
-  /** Opens the Factory session in a new browser tab once its id is available. */
+  /** Opens an optional external agent session when one is attached to the run. */
   function openLiveWindow(): void {
     if (run.status !== "running") {
       return;
@@ -173,7 +173,7 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
                 Reset demo
               </button>
               <p className="run__result">
-                Workspace is now patched on local branch {run.run.branchName ?? `ticketdroid/${ticket.id}`} — reset restores the planted state, removes the branch, and checks out main.
+                Workspace is now patched on local branch {run.run.branchName ?? `pulsedesk/${ticket.id}`} — reset restores the planted state, removes the branch, and checks out main.
               </p>
             </div>
           </>
@@ -183,7 +183,7 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
           <>
             <div className="run__actions">
               <button type="button" className="run__button" disabled>
-                Running Ticketdroid…
+                Running PulseDesk analysis…
               </button>
               <button
                 type="button"
@@ -196,7 +196,7 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
             </div>
             <RunLiveView events={run.events} startedAt={run.startedAt} />
             <p className="run__result">
-              A Factory droid is working in the repository on branch ticketdroid/{ticket.id}. Open the session in Factory for the full transcript.
+              The local analysis is working on branch pulsedesk/{ticket.id}. No code is pushed, merged, or deployed.
             </p>
           </>
         ) : run.status === "resetting" ? (
@@ -223,15 +223,17 @@ export function TicketDetail({ ticket }: { ticket: Ticket }) {
             </button>
             <p className="run__result run__result--error">{run.message}</p>
           </div>
-        ) : (
+        ) : ticket.wired ? (
           <>
             <button type="button" className="run__button" onClick={() => void handleRun()}>
-              Run Ticketdroid
+              Run PulseDesk analysis
             </button>
             <p className="run__result">
-              Calls back to Factory: a droid investigates {ticket.id}, implements a fix in the repo, and returns a reviewable PR.
+              Runs the local regression workflow for {ticket.id}, prepares a focused patch, and returns reviewable evidence.
             </p>
           </>
+        ) : (
+          <p className="run__result">This ticket is available for review but has no automated local run.</p>
         )}
       </section>
     </article>

@@ -39,7 +39,7 @@ export interface UntrackedManifest {
 
 /**
  * Records which untracked and ignored files existed before a run started, so
- * demo reset can later remove exactly what a droid run created (tracked files
+ * demo reset can later remove exactly what an automated run created (tracked files
  * disappear with the branch; untracked and ignored ones are deleted by
  * difference) without touching pre-existing user files.
  */
@@ -89,7 +89,7 @@ export function readUntrackedSnapshots(): UntrackedSnapshot[] {
     });
 }
 
-/** Removes every Ticketdroid run artifact (runs directory is Ticketdroid-owned). */
+/** Removes every PulseDesk run artifact (runs directory is PulseDesk-owned). */
 export function clearRunArtifacts(): void {
   const dir = runsDirectory();
   if (!existsSync(dir)) {

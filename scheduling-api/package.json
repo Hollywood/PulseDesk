@@ -1,5 +1,5 @@
 {
-  "name": "@ticketdroid/scheduling-api",
+  "name": "@pulsedesk/scheduling-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",

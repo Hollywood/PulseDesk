@@ -451,7 +451,7 @@ code {
   background: var(--surface);
 }
 
-/* ---------- Live droid session ---------- */
+/* ---------- Live analysis session ---------- */
 
 .run-live {
   margin-top: 16px;

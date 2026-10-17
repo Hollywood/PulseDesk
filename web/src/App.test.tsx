@@ -15,7 +15,7 @@ const fixture = [
     title: "Member identifier leaked in claim-status debug logs",
     summary: "claim-status-api emits the raw memberId into debug log records; downstream shipping retains it.",
     alert_body: "Service: claims-status-api\nSample excerpt: event=claim_status_check memberId=MBR-0001 claimId=CLM-2381",
-    wired: true,
+    wired: false,
     notes_for_demo: "",
   },
   {
@@ -41,7 +41,7 @@ const fixture = [
     title: "Intermittent double-booking on appointment reschedule",
     summary: "Two appointment slots created for the same patient/provider pair.",
     alert_body: "Error: SlotConflictWarning (non-fatal)",
-    wired: true,
+    wired: false,
     notes_for_demo: "",
   },
   {
@@ -54,7 +54,7 @@ const fixture = [
     title: "HL7 ADT feed lag exceeding 15 min threshold",
     summary: "Outbound ADT messages queuing with rising lag; no failures yet.",
     alert_body: "Monitor: hl7-adt-queue-lag",
-    wired: true,
+    wired: false,
     notes_for_demo: "",
   },
   {
@@ -67,7 +67,7 @@ const fixture = [
     title: "Nightly claims batch export job ran 40 min longer than baseline",
     summary: "Batch export completed but exceeded the SLA window; no data loss.",
     alert_body: "Job: nightly-claims-export",
-    wired: true,
+    wired: false,
     notes_for_demo: "",
   },
 ] as const satisfies readonly Ticket[];
@@ -79,12 +79,12 @@ const statusBody = {
   reviewReady: false,
   runState: "idle",
   regression: "claims-api duplicate submission regression",
-  detail: "Planted regression is red as expected; ready for a Ticketdroid run.",
+  detail: "Planted regression is red as expected; ready for a PulseDesk run.",
 };
 
 const runResult: TicketRunResult = {
   ticketId: "TICKET-1042",
-  branchName: "ticketdroid/TICKET-1042",
+  branchName: "pulsedesk/TICKET-1042",
   status: "complete",
   startedAt: 1_000,
   finishedAt: 3_000,
@@ -208,7 +208,7 @@ async function renderApp(hash = "#/") {
 }
 
 beforeEach(() => {
-  // The Factory session opens via window.open from the Live Window control;
+  // The agent session opens via window.open from the Live Window control;
   // a no-op stub keeps jsdom quiet and lets tests assert the call.
   vi.stubGlobal("open", vi.fn(() => null));
   vi.stubGlobal(
@@ -304,15 +304,19 @@ describe("detail view", () => {
     expect(screen.getByText(/claims-submission-duplicate-check/)).toBeInTheDocument();
   });
 
-  it("shows a Run Ticketdroid button for every ticket", async () => {
+  it("offers local analysis only for wired tickets", async () => {
     for (const ticket of fixture) {
       window.location.hash = `#/tickets/${ticket.id}`;
       const view = render(<App />);
       await waitFor(() => {
         expect(screen.getAllByText(ticket.id).length).toBeGreaterThan(0);
       });
-      expect(screen.getByRole("button", { name: "Run Ticketdroid" })).toBeInTheDocument();
-      expect(screen.queryByText("Read-only signal — no automated run for this ticket.")).not.toBeInTheDocument();
+      if (ticket.wired) {
+        expect(screen.getByRole("button", { name: "Run PulseDesk analysis" })).toBeInTheDocument();
+      } else {
+        expect(screen.queryByRole("button", { name: "Run PulseDesk analysis" })).not.toBeInTheDocument();
+        expect(screen.getByText("This ticket is available for review but has no automated local run.")).toBeInTheDocument();
+      }
       view.unmount();
     }
   });
@@ -326,7 +330,7 @@ describe("detail view", () => {
       expect(window.location.hash).toBe("#/tickets/TICKET-1042");
     });
 
-    await userEvent.click(screen.getByRole("button", { name: "Run Ticketdroid" }));
+    await userEvent.click(screen.getByRole("button", { name: "Run PulseDesk analysis" }));
 
     const runCalls = fetchMock.mock.calls.filter(([input, init]) =>
       String(input).startsWith("/api/tickets/TICKET-1042/run") && init?.method === "POST",
@@ -381,7 +385,7 @@ describe("detail view", () => {
     expect(within(metrics).getByText("Tests added / updated").nextElementSibling).toHaveTextContent("1");
     expect(within(metrics).getByText("Human review remaining").nextElementSibling).toHaveTextContent("Required");
     expect(
-      screen.getByText(/Requires human approval before merge — Ticketdroid never merges or deploys on its own/),
+      screen.getByText(/Requires human approval before merge — PulseDesk never merges or deploys on its own/),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /merge|deploy/i })).not.toBeInTheDocument();
   });
@@ -395,14 +399,14 @@ describe("detail view", () => {
     });
 
     expect(await screen.findByText("Run complete")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Run Ticketdroid" })).not.toBeInTheDocument();
-    expect(screen.getByText(/Workspace is now patched on local branch ticketdroid\/TICKET-1042/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run PulseDesk analysis" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Workspace is now patched on local branch pulsedesk\/TICKET-1042/)).toBeInTheDocument();
   });
 
   it("caters the recommended CI actions to the bug each run fixed", async () => {
     const schedulingRun: TicketRunResult = {
       ticketId: "TICKET-1038",
-      branchName: "ticketdroid/TICKET-1038",
+      branchName: "pulsedesk/TICKET-1038",
       status: "complete",
       startedAt: 1_000,
       finishedAt: 3_000,
@@ -524,7 +528,7 @@ describe("detail view", () => {
         ),
       ).toBe(true);
     });
-    expect(await screen.findByRole("button", { name: "Run Ticketdroid" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Run PulseDesk analysis" })).toBeInTheDocument();
     expect(screen.queryByText("Run complete")).not.toBeInTheDocument();
   });
 
@@ -541,7 +545,7 @@ describe("detail view", () => {
     });
 
     expect(await screen.findByText(/Workspace is patched; reset is required before a new run/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Run Ticketdroid" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run PulseDesk analysis" })).not.toBeInTheDocument();
   });
 
   it("offers reset when a local run branch blocks a retry", async () => {
@@ -555,7 +559,7 @@ describe("detail view", () => {
     };
     await renderApp();
     await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
-    await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Run PulseDesk analysis" }));
 
     expect(await screen.findByText(/local demo branch already exists/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reset demo" })).toBeInTheDocument();
@@ -577,7 +581,7 @@ describe("error handling", () => {
   });
 });
 
-describe("live droid session", () => {
+describe("live analysis", () => {
   class FakeEventSource {
     static last: FakeEventSource | null = null;
     onmessage: ((event: MessageEvent<string>) => void) | null = null;
@@ -613,7 +617,7 @@ describe("live droid session", () => {
 
     await renderApp();
     await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
-    await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Run PulseDesk analysis" }));
     return await waitFor(() => {
       expect(FakeEventSource.last).not.toBeNull();
       return FakeEventSource.last!;
@@ -623,11 +627,11 @@ describe("live droid session", () => {
   it("subscribes to the run event stream for the ticket being run", async () => {
     const source = await startPendingRun();
     expect(source.url).toBe("/api/tickets/TICKET-1042/run/events");
-    expect(screen.getByText("Droid session in progress")).toBeInTheDocument();
-    expect(screen.getByText(/Starting a Factory droid session/)).toBeInTheDocument();
+    expect(screen.getByText("Automated analysis in progress")).toBeInTheDocument();
+    expect(screen.getByText(/Starting the local analysis/)).toBeInTheDocument();
   });
 
-  it("renders the droid's streamed reasoning and repository actions", async () => {
+  it("renders the automation's streamed reasoning and repository actions", async () => {
     const source = await startPendingRun();
 
     await act(async () => {
@@ -635,7 +639,7 @@ describe("live droid session", () => {
         kind: "session",
         at: 1,
         sessionId: "5fcc2798-d0da-413a",
-        sessionUrl: "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
+        sessionUrl: "https://agent.example/sessions/5fcc2798-d0da-413a",
       });
       source.emit({ kind: "thinking", at: 2, text: "Checking the retry path" });
       source.emit({ kind: "activity", at: 3, tool: "Grep", detail: "idempotency" });
@@ -649,9 +653,9 @@ describe("live droid session", () => {
     // Action count and session id give the demo a sense of progress.
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("5fcc2798")).toBeInTheDocument();
-    // The live Factory session is reachable from the run panel.
-    const openLink = screen.getByRole("link", { name: /Open in Factory/ });
-    expect(openLink).toHaveAttribute("href", "https://app.factory.ai/sessions/5fcc2798-d0da-413a");
+    // The live agent session is reachable from the run panel.
+    const openLink = screen.getByRole("link", { name: /Open agent session/ });
+    expect(openLink).toHaveAttribute("href", "https://agent.example/sessions/5fcc2798-d0da-413a");
   });
 
   it("closes the stream once the run resolves", async () => {
@@ -660,7 +664,7 @@ describe("live droid session", () => {
 
     await renderApp();
     await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
-    await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Run PulseDesk analysis" }));
 
     expect(await screen.findByText("Run complete")).toBeInTheDocument();
     expect(FakeEventSource.last?.closed).toBe(true);
@@ -691,7 +695,7 @@ describe("reattaching to a run in flight", () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     // No run recorded yet, so the view opens idle but still follows the stream.
     await renderApp("#/tickets/TICKET-1042");
-    expect(screen.getByRole("button", { name: "Run Ticketdroid" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run PulseDesk analysis" })).toBeInTheDocument();
 
     const source = await waitFor(() => {
       expect(FakeEventSource.last).not.toBeNull();
@@ -701,7 +705,7 @@ describe("reattaching to a run in flight", () => {
     await act(async () => {
       source.emit({ kind: "activity", at: 1_000, tool: "Grep", detail: "idempotency" });
     });
-    expect(screen.getByText("Droid session in progress")).toBeInTheDocument();
+    expect(screen.getByText("Automated analysis in progress")).toBeInTheDocument();
     expect(screen.getByText("Grep")).toBeInTheDocument();
 
     // The run finishes elsewhere; the recorded artifact resolves the view.
@@ -717,7 +721,7 @@ describe("reattaching to a run in flight", () => {
   it("surfaces a failed run reported on the stream", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     await renderApp("#/tickets/TICKET-1042");
-    expect(screen.getByRole("button", { name: "Run Ticketdroid" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run PulseDesk analysis" })).toBeInTheDocument();
     const source = await waitFor(() => {
       expect(FakeEventSource.last).not.toBeNull();
       return FakeEventSource.last!;
@@ -729,12 +733,12 @@ describe("reattaching to a run in flight", () => {
         kind: "finished",
         at: 2_000,
         ok: false,
-        detail: "The Factory droid session exceeded its time limit and was stopped.",
+        detail: "The automated analysis exceeded its time limit and was stopped.",
       });
     });
 
     expect(
-      await screen.findByText("The Factory droid session exceeded its time limit and was stopped."),
+      await screen.findByText("The automated analysis exceeded its time limit and was stopped."),
     ).toBeInTheDocument();
   });
 });
@@ -767,7 +771,7 @@ describe("live session window", () => {
     kind: "session" as const,
     at: 1_000,
     sessionId: "5fcc2798-d0da-413a",
-    sessionUrl: "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
+    sessionUrl: "https://agent.example/sessions/5fcc2798-d0da-413a",
   };
 
   it("does not open a live window when a run starts", async () => {
@@ -775,13 +779,13 @@ describe("live session window", () => {
     const openMock = vi.mocked(globalThis.open);
     await renderApp();
     await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
-    await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Run PulseDesk analysis" }));
 
     expect(await screen.findByText("Run complete")).toBeInTheDocument();
     expect(openMock).not.toHaveBeenCalled();
   });
 
-  it("opens the Factory session in a new browser tab from the running state", async () => {
+  it("opens the agent session in a new browser tab from the running state", async () => {
     const passthrough = vi.mocked(globalThis.fetch).getMockImplementation();
     vi.stubGlobal("EventSource", FakeEventSource);
     vi.stubGlobal(
@@ -796,7 +800,7 @@ describe("live session window", () => {
 
     await renderApp();
     await userEvent.click(screen.getByText("Duplicate claim submission detected — claims-api"));
-    await userEvent.click(await screen.findByRole("button", { name: "Run Ticketdroid" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Run PulseDesk analysis" }));
 
     const source = await waitFor(() => {
       expect(FakeEventSource.last).not.toBeNull();
@@ -810,7 +814,7 @@ describe("live session window", () => {
     openMock.mockClear();
     await userEvent.click(await screen.findByRole("button", { name: "Live Window ↗" }));
     expect(openMock).toHaveBeenCalledWith(
-      "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
+      "https://agent.example/sessions/5fcc2798-d0da-413a",
       "_blank",
       "noopener,noreferrer",
     );
@@ -819,11 +823,11 @@ describe("live session window", () => {
   it("waits for the run's session to start", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     await renderApp("#/live/TICKET-1038");
-    expect(screen.getByText(/Waiting for the droid session to start/)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for the analysis to start/)).toBeInTheDocument();
     expect(FakeEventSource.last?.url).toBe("/api/tickets/TICKET-1038/run/events");
   });
 
-  it("summarizes the droid's work and lets users download the full trace", async () => {
+  it("summarizes the automated run's work and lets users download the full trace", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     await renderApp("#/live/TICKET-1042");
     const source = await waitFor(() => {
@@ -844,23 +848,23 @@ describe("live session window", () => {
     expect(screen.getByText("Preparing a safe fix")).toBeInTheDocument();
     expect(screen.queryByText("idempotency")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download full trace" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open in Factory ↗" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open agent session ↗" })).toHaveAttribute(
       "href",
-      "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
+      "https://agent.example/sessions/5fcc2798-d0da-413a",
     );
     expect(screen.getByRole("link", { name: "← Back to ticket" })).toHaveAttribute("href", "#/tickets/TICKET-1042");
   });
 
   it("downloads the complete streamed trace as JSON", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
-    const createObjectURL = vi.fn(() => "blob:ticketdroid-trace");
+    const createObjectURL = vi.fn(() => "blob:pulsedesk-trace");
     const revokeObjectURL = vi.fn();
     vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
     const linkClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
       this: HTMLAnchorElement,
     ) {
-      expect(this.download).toBe("ticket-1042-droid-trace.json");
-      expect(this.href).toBe("blob:ticketdroid-trace");
+      expect(this.download).toBe("ticket-1042-analysis-trace.json");
+      expect(this.href).toBe("blob:pulsedesk-trace");
     });
     await renderApp("#/live/TICKET-1042");
     const source = await waitFor(() => {
@@ -876,10 +880,10 @@ describe("live session window", () => {
 
     expect(createObjectURL).toHaveBeenCalledOnce();
     expect(linkClick).toHaveBeenCalledOnce();
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:ticketdroid-trace");
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:pulsedesk-trace");
   });
 
-  it("lands on the completion panel with PR and Factory session links", async () => {
+  it("lands on the completion panel with PR and agent session links", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     await renderApp("#/live/TICKET-1042");
     const source = await waitFor(() => {
@@ -900,9 +904,9 @@ describe("live session window", () => {
     expect(await screen.findByText("Run complete")).toBeInTheDocument();
     expect(screen.getByText(/RCA, test evidence, and PR view are ready/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View the PR view →" })).toHaveAttribute("href", "#/tickets/TICKET-1042");
-    expect(screen.getByRole("link", { name: "Open in Factory ↗" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open agent session ↗" })).toHaveAttribute(
       "href",
-      "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
+      "https://agent.example/sessions/5fcc2798-d0da-413a",
     );
     expect(source.closed).toBe(true);
   });
@@ -921,17 +925,17 @@ describe("live session window", () => {
         kind: "finished",
         at: 4_000,
         ok: false,
-        detail: "The Factory droid session exceeded its time limit and was stopped.",
+        detail: "The automated analysis exceeded its time limit and was stopped.",
       });
     });
 
     expect(await screen.findByText("The run could not be completed")).toBeInTheDocument();
     expect(
-      screen.getByText("The Factory droid session exceeded its time limit and was stopped."),
+      screen.getByText("The automated analysis exceeded its time limit and was stopped."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open in Factory ↗" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open agent session ↗" })).toHaveAttribute(
       "href",
-      "https://app.factory.ai/sessions/5fcc2798-d0da-413a",
+      "https://agent.example/sessions/5fcc2798-d0da-413a",
     );
   });
 });

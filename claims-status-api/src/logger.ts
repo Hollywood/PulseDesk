@@ -16,7 +16,7 @@ export interface LoggerOptions {
   /**
    * Dotted payload paths whose values are replaced with "[Redacted]" before the
    * record is written. Defaults cover auth/cookie-style credentials but do NOT
-   * cover member-identifying fields; the droid's TICKET-1051 fix is to add
+   * cover member-identifying fields; the TICKET-1051 fix is to add
    * `memberId` (or equivalent) here. Identifiers in payloads are always opaque
    * synthetic IDs — never real PHI.
    */

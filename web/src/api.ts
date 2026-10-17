@@ -32,7 +32,7 @@ export function fetchTicket(id: string): Promise<Ticket> {
   return getJson<Ticket>(`/api/tickets/${encodeURIComponent(id)}`);
 }
 
-/** Starts a Ticketdroid run for the ticket; resolves with the full run result. */
+/** Starts a PulseDesk run for the ticket; resolves with the full run result. */
 export async function startTicketRun(id: string): Promise<TicketRunResult> {
   const res = await fetch(`/api/tickets/${encodeURIComponent(id)}/run`, {
     method: "POST",
