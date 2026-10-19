@@ -36,7 +36,7 @@ spec:
         - name: pulsedesk
           # Harness resolves this from the Docker Hub primary artifact selected
           # by the service before applying the manifest.
-          image: <+artifacts.primary.image>
+          image: ghcr.io/hollywood/pulsedesk:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
