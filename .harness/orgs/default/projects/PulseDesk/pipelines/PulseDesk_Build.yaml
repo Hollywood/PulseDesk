@@ -8,7 +8,9 @@ pipeline:
     connector: PulseDesk_GitHub
     name: Hollywood/PulseDesk
   clone:
-    depth: 1
+    # PR validation creates a synthetic merge with the target branch. A depth-1
+    # checkout has no common ancestor and Harness rejects it as unrelated history.
+    depth: 0
   on:
     - push
     - pull_request:
