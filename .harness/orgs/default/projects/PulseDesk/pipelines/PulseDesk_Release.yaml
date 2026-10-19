@@ -9,7 +9,7 @@ pipeline:
     name: Hollywood/PulseDesk
   clone:
     depth: 1
-  on:
+  "on":
     - push:
         branches:
           - main
