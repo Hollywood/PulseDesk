@@ -1,29 +1,34 @@
 pipeline:
   id: PulseDesk_Build
   name: PulseDesk Build
-  description: Validate PulseDesk and publish a container image to GHCR.
+  description: Validate every branch and pull request without publishing an image.
   tags:
     ai_generated: ""
-  clone:
-    enabled: true
+  repo:
     connector: PulseDesk_GitHub
-    repo: Hollywood/PulseDesk
-    ref:
-      type: branch
-      name: main
+    name: Hollywood/PulseDesk
+  clone:
+    # PR validation creates a synthetic merge with the target branch. A depth-1
+    # checkout has no common ancestor and Harness rejects it as unrelated history.
+    depth: 0
+  on:
+    - push
+    - pull_request:
+        branches:
+          - main
   stages:
-    - id: Build_Test_and_Publish
-      name: Build Test and Publish
-      description: Validate PulseDesk and publish a container image to GHCR.
+    - id: Validation
+      name: Validation
+      description: Certify the deterministic baseline, run supported tests, and build the application.
       runtime: cloud
       platform:
         os: linux
         arch: amd64
       steps:
-        - id: Validate_PulseDesk
-          name: Validate PulseDesk
+        - id: Install_Dependencies
+          name: Install Dependencies
           run:
-            container: 
+            container:
               image: node:22-alpine
               connector: account.harnessImage
             shell: sh
@@ -36,22 +41,45 @@ pipeline:
               node --version
               npm install --global pnpm@11.25.0
               pnpm --version
-
               pnpm install --frozen-lockfile
 
-              pnpm -r typecheck
-              pnpm -r test
-              pnpm --dir claims-api gate
+        - id: Report_Supported_Tests
+          name: Report Supported Tests
+          run-test:
+            container:
+              image: node:22-alpine
+              connector: account.harnessImage
+            shell: sh
+            script: |-
+              set -eu
 
+              npm install --global pnpm@11.25.0
+              mkdir -p test-results
+              pnpm --dir web exec vitest run \
+                --reporter=junit \
+                --outputFile=../test-results/web.xml
+              pnpm --dir scheduling-api exec vitest run \
+                --reporter=junit \
+                --outputFile=../test-results/scheduling.xml
+            report:
+              type: junit
+              path: test-results/*.xml
+            intelligence:
+              disabled: true
+
+        - id: Certify_and_Build_PulseDesk
+          name: Certify and Build PulseDesk
+          run:
+            container:
+              image: node:22-alpine
+              connector: account.harnessImage
+            shell: sh
+            script: |-
+              set -eu
+
+              apk add --no-cache git
+              npm install --global pnpm@11.25.0
+              pnpm --dir claims-api gate
+              pnpm -r typecheck
               pnpm --dir claims-api build
               pnpm --dir web build
-        - id: Build_and_Push_PulseDesk
-          name: Build and Push PulseDesk
-          build:
-            uses: buildAndPushToDocker
-            with:
-              connector: PulseDesk_GHCR
-              repo: ghcr.io/hollywood/pulsedesk
-              tags:
-                - ${{ codebase.commitSha }}
-                - latest
