@@ -1,15 +1,9 @@
 pipeline:
   id: PulseDesk_Build
   name: PulseDesk Build
-  description: Validate every branch and pull request; publish main as a commit-tagged image.
+  description: Validate every branch and pull request without publishing an image.
   tags:
     ai_generated: ""
-  inputs:
-    # Publishing is opt-in so pull-request validation can never push an image.
-    # The dedicated main-branch push trigger sets this input to true.
-    publish_image:
-      type: boolean
-      default: false
   repo:
     connector: PulseDesk_GitHub
     name: Hollywood/PulseDesk
@@ -23,9 +17,9 @@ pipeline:
         branches:
           - main
   stages:
-    - id: Build_Test_and_Publish
-      name: Build Test and Publish
-      description: Certify the deterministic baseline, run supported tests, and publish only main.
+    - id: Validation
+      name: Validation
+      description: Certify the deterministic baseline, run supported tests, and build the application.
       runtime: cloud
       platform:
         os: linux
@@ -86,17 +80,3 @@ pipeline:
               pnpm -r typecheck
               pnpm --dir claims-api build
               pnpm --dir web build
-
-        - id: Build_and_Push_PulseDesk
-          name: Build and Push PulseDesk
-          if: ${{ branch == "main" && inputs.publish_image == true }}
-          build:
-            uses: buildAndPushToDocker
-            with:
-              connector: PulseDesk_GHCR
-              repo: ghcr.io/hollywood/pulsedesk
-              tags:
-                - ${{ codebase.commitSha }}
-                - latest
-              dockerfile: Dockerfile
-              context: .

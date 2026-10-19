@@ -1,0 +1,92 @@
+pipeline:
+  id: PulseDesk_Release
+  name: PulseDesk Release
+  description: Revalidate main and publish a commit-tagged PulseDesk image.
+  tags:
+    ai_generated: ""
+  repo:
+    connector: PulseDesk_GitHub
+    name: Hollywood/PulseDesk
+  clone:
+    depth: 1
+  on:
+    - push:
+        branches:
+          - main
+  stages:
+    - id: Build_Test_and_Publish
+      name: Build Test and Publish
+      description: Revalidate merged code, build the application, and publish an immutable image.
+      runtime: cloud
+      platform:
+        os: linux
+        arch: amd64
+      steps:
+        - id: Install_Dependencies
+          name: Install Dependencies
+          run:
+            container:
+              image: node:22-alpine
+              connector: account.harnessImage
+            shell: sh
+            script: |-
+              set -eu
+
+              node --version
+              npm install --global pnpm@11.25.0
+              pnpm --version
+              pnpm install --frozen-lockfile
+
+        - id: Report_Supported_Tests
+          name: Report Supported Tests
+          run-test:
+            container:
+              image: node:22-alpine
+              connector: account.harnessImage
+            shell: sh
+            script: |-
+              set -eu
+
+              npm install --global pnpm@11.25.0
+              mkdir -p test-results
+              pnpm --dir web exec vitest run \
+                --reporter=junit \
+                --outputFile=../test-results/web.xml
+              pnpm --dir scheduling-api exec vitest run \
+                --reporter=junit \
+                --outputFile=../test-results/scheduling.xml
+            report:
+              type: junit
+              path: test-results/*.xml
+            intelligence:
+              disabled: true
+
+        - id: Certify_and_Build_PulseDesk
+          name: Certify and Build PulseDesk
+          run:
+            container:
+              image: node:22-alpine
+              connector: account.harnessImage
+            shell: sh
+            script: |-
+              set -eu
+
+              apk add --no-cache git
+              npm install --global pnpm@11.25.0
+              pnpm --dir claims-api gate
+              pnpm -r typecheck
+              pnpm --dir claims-api build
+              pnpm --dir web build
+
+        - id: Build_and_Push_PulseDesk
+          name: Build and Push PulseDesk
+          build:
+            uses: buildAndPushToDocker
+            with:
+              connector: PulseDesk_GHCR
+              repo: ghcr.io/hollywood/pulsedesk
+              tags:
+                - ${{ codebase.commitSha }}
+                - latest
+              dockerfile: Dockerfile
+              context: .
