@@ -79,8 +79,8 @@ pipeline:
         - id: Build_and_Push_PulseDesk
           name: Build and Push PulseDesk
           if: ${{ branch == "main" }}
-          template:
-            uses: buildAndPushToDocker@1.0.0
+          build:
+            uses: buildAndPushToDocker
             with:
               connector: PulseDesk_GHCR
               repo: ghcr.io/hollywood/pulsedesk
