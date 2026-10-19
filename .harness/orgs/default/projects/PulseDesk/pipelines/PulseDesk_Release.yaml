@@ -49,6 +49,9 @@ pipeline:
                     command: |-
                       set -eu
 
+                      apk add --no-cache git
+                      git --version
+
                       npm install --global pnpm@11.25.0
                       pnpm install --frozen-lockfile
                       pnpm --dir claims-api gate
