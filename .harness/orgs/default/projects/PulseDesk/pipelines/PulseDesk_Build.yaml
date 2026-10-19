@@ -48,6 +48,7 @@ pipeline:
             script: |-
               set -eu
 
+              npm install --global pnpm@11.25.0
               mkdir -p test-results
               pnpm --dir web exec vitest run \
                 --reporter=junit \
@@ -71,6 +72,7 @@ pipeline:
             script: |-
               set -eu
 
+              npm install --global pnpm@11.25.0
               pnpm --dir claims-api gate
               pnpm -r typecheck
               pnpm --dir claims-api build
