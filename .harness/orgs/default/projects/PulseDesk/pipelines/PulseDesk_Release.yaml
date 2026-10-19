@@ -43,6 +43,8 @@ pipeline:
                   identifier: Certify_and_Build_PulseDesk
                   type: Run
                   spec:
+                    connectorRef: account.harnessImage
+                    image: node:22-alpine
                     shell: Sh
                     command: |-
                       set -eu
