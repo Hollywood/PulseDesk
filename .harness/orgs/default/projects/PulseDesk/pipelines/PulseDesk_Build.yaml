@@ -4,6 +4,12 @@ pipeline:
   description: Validate every branch and pull request; publish main as a commit-tagged image.
   tags:
     ai_generated: ""
+  inputs:
+    # Publishing is opt-in so pull-request validation can never push an image.
+    # The dedicated main-branch push trigger sets this input to true.
+    publish_image:
+      type: boolean
+      default: false
   repo:
     connector: PulseDesk_GitHub
     name: Hollywood/PulseDesk
@@ -83,7 +89,7 @@ pipeline:
 
         - id: Build_and_Push_PulseDesk
           name: Build and Push PulseDesk
-          if: ${{ branch == "main" }}
+          if: ${{ branch == "main" && inputs.publish_image }}
           build:
             uses: buildAndPushToDocker
             with:
