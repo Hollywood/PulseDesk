@@ -21,6 +21,24 @@ pipeline:
           execution:
             steps:
               - step:
+                  name: Install Dependencies
+                  identifier: Install_Dependencies
+                  type: Run
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: node:22-alpine
+                    shell: Sh
+                    command: |-
+                      set -eu
+
+                      apk add --no-cache git
+                      git --version
+
+                      node --version
+                      npm install --global pnpm@11.25.0
+                      pnpm --version
+                      pnpm install --frozen-lockfile
+              - step:
                   name: Certify and Build PulseDesk
                   identifier: Certify_and_Build_PulseDesk
                   type: Run
