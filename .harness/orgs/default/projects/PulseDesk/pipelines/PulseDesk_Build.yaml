@@ -89,7 +89,7 @@ pipeline:
 
         - id: Build_and_Push_PulseDesk
           name: Build and Push PulseDesk
-          if: ${{ branch == "main" && inputs.publish_image }}
+          if: ${{ branch == "main" && inputs.publish_image == true }}
           build:
             uses: buildAndPushToDocker
             with:
