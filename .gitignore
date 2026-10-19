@@ -7,4 +7,5 @@ build/
 .DS_Store
 artifacts/
 coverage/
+test-results/
 *.tsbuildinfo

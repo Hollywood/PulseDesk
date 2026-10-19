@@ -44,3 +44,31 @@ curl --fail http://localhost:4310/api/health
 The Service is intentionally `ClusterIP`. Use Harness verification, a temporary
 port-forward, or an existing ingress to reach it; do not expose a public load
 balancer solely for the interview demo.
+
+Verify the live workload and application:
+
+```bash
+kubectl -n pulsedesk rollout status deployment/pulsedesk --timeout=180s
+kubectl -n pulsedesk get deployment,pods,service,endpointslice -o wide
+kubectl -n pulsedesk port-forward service/pulsedesk 4310:80
+curl --fail http://127.0.0.1:4310/api/health
+curl --fail http://127.0.0.1:4310/api/tickets
+```
+
+Expected health response:
+
+```json
+{"status":"ok"}
+```
+
+## Cleanup
+
+Remove only the application namespace when the local deployment is no longer
+needed:
+
+```bash
+kubectl delete namespace pulsedesk
+```
+
+Do not remove `harness-delegate-ng`; the delegate is shared Harness
+infrastructure rather than an application resource.
