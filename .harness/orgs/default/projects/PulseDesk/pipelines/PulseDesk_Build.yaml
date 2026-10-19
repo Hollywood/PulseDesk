@@ -74,6 +74,7 @@ pipeline:
             script: |-
               set -eu
 
+              apk add --no-cache git
               npm install --global pnpm@11.25.0
               pnpm --dir claims-api gate
               pnpm -r typecheck
